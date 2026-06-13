@@ -111,7 +111,7 @@
   <div class="tagline">한국말로 말하면, 앱이 됩니다</div>
   <div class="spacer"></div>
   <div class="trial-badge hidden" id="trialBadge"></div>
-  <button class="hbtn primary hidden" id="btnSubscribe">구독하기</button>
+  <button class="hbtn primary hidden" id="btnFeedback">💬 피드백</button>
   <button class="hbtn hidden" id="btnLogout">로그아웃</button>
 </header>
 
@@ -177,20 +177,21 @@
   </div>
 </div>
 
-<!-- 구독 페이월 모달 -->
-<div class="overlay hidden" id="payModal">
+<!-- 베타 안내 + 피드백 모달 -->
+<div class="overlay hidden" id="fbModal">
   <div class="modal">
-    <h2 id="payTitle">말로 프로 시작하기</h2>
-    <p class="sub" id="paySub">30분 무료 체험 후에는 구독이 필요해요.</p>
-    <div class="price"><span class="won">9,900원</span> <span class="per">/ 월</span></div>
-    <ul class="feat">
-      <li>매달 앱 만들기 100회</li>
-      <li>한국말로 무한 수정</li>
-      <li>결과물 파일 저장 무제한</li>
-      <li>언제든 해지 가능</li>
-    </ul>
-    <button class="bigbtn" id="btnPay">월 9,900원으로 시작하기</button>
-    <button class="bigbtn gray" id="btnPayClose">나중에 할게요</button>
+    <h2 id="fbTitle">의견을 들려주세요 💬</h2>
+    <p class="sub" id="fbSub">말로는 지금 베타 테스트 중이에요. 좋았던 점·불편한 점·만들고 싶은 기능 뭐든 적어 주세요!</p>
+    <div id="fbStars" style="display:flex;gap:8px;justify-content:center;margin:20px 0 14px;font-size:32px;line-height:1">
+      <span class="star" data-v="1" style="cursor:pointer;color:#d6dce3">★</span>
+      <span class="star" data-v="2" style="cursor:pointer;color:#d6dce3">★</span>
+      <span class="star" data-v="3" style="cursor:pointer;color:#d6dce3">★</span>
+      <span class="star" data-v="4" style="cursor:pointer;color:#d6dce3">★</span>
+      <span class="star" data-v="5" style="cursor:pointer;color:#d6dce3">★</span>
+    </div>
+    <textarea id="fbText" rows="4" placeholder="자유롭게 후기를 남겨 주세요 (예: 어떤 앱을 만들고 싶었는지, 아쉬운 점)" style="width:100%;border:2px solid var(--line);border-radius:12px;padding:12px 14px;font-size:15px;font-family:inherit;line-height:1.5;resize:none;outline:none;box-sizing:border-box"></textarea>
+    <button class="bigbtn" id="btnFbSend">보내기</button>
+    <button class="bigbtn gray" id="btnFbClose">닫기</button>
   </div>
 </div>
 
@@ -241,8 +242,20 @@ function renderPreview(html, force=false){
 }
 
 /* ================== 인증 ================== */
+function track(name, params){ try{ if(window.gtag) window.gtag('event', name, params||{}); }catch(e){} }
+function loadGA(id){
+  if(!id || window.gtag) return;
+  const s = document.createElement('script'); s.async = true;
+  s.src = 'https://www.googletagmanager.com/gtag/js?id=' + id;
+  document.head.appendChild(s);
+  window.dataLayer = window.dataLayer || [];
+  window.gtag = function(){ dataLayer.push(arguments); };
+  gtag('js', new Date());
+  gtag('config', id);
+}
 async function initAuth(){
   const cfg = await (await fetch('/api/config')).json();
+  loadGA(cfg.gaId);
   S.supabase = createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
   const { data:{ session } } = await S.supabase.auth.getSession();
   setSession(session);
@@ -253,9 +266,12 @@ function setSession(session){
   const loggedIn = !!session;
   $('loginModal').classList.toggle('hidden', loggedIn);
   $('btnLogout').classList.toggle('hidden', !loggedIn);
-  $('btnSubscribe').classList.toggle('hidden', !loggedIn);
+  $('btnFeedback').classList.toggle('hidden', !loggedIn);
   $('trialBadge').classList.toggle('hidden', !loggedIn);
-  if(loggedIn) refreshMe();
+  if(loggedIn){
+    refreshMe();
+    if(!S.loggedTracked){ S.loggedTracked = true; track('login'); }
+  }
 }
 async function refreshMe(){
   try{
@@ -263,15 +279,11 @@ async function refreshMe(){
     if(!res.ok) return;
     S.me = await res.json();
     const b = $('trialBadge');
-    if(S.me.subscribed){
-      b.textContent = `프로 ✨ ${S.me.used}/${S.me.limit}회`;
-      b.classList.remove('expired');
-      $('btnSubscribe').classList.add('hidden');
-    } else if(S.me.trialLeft > 0){
-      b.textContent = `무료 체험 ${S.me.trialLeft}분 남음`;
+    if(S.me.trialLeft > 0){
+      b.textContent = `🧪 베타 체험 ${S.me.trialLeft}분 남음`;
       b.classList.remove('expired');
     } else {
-      b.textContent = '체험 종료';
+      b.textContent = '🧪 베타 체험 종료';
       b.classList.add('expired');
     }
   }catch(e){}
@@ -316,10 +328,9 @@ async function generate(req){
     if(!res.ok){
       let err = {};
       try{ err = await res.json(); }catch(e){}
-      if(err.code === 'trial_over'){
-        $('payTitle').textContent = '무료 체험이 끝났어요 🥲';
-        $('paySub').textContent = '계속 만들려면 구독이 필요해요. 월 9,900원, 언제든 해지할 수 있어요.';
-        $('payModal').classList.remove('hidden');
+      if(err.code === 'trial_over' || err.code === 'limit'){
+        track('trial_over', { reason: err.code });
+        openFeedback(true);
       }
       throw new Error(err.error || '문제가 생겼어요. 다시 시도해 주세요.');
     }
@@ -355,6 +366,7 @@ async function generate(req){
     botMsg.textContent = S.codeHistory
       ? '수정했어요! 오른쪽에서 확인해 보세요. 더 고치고 싶은 게 있으면 말씀해 주세요 😊'
       : '완성했어요! 오른쪽에서 바로 써보세요. 마음에 안 드는 부분은 말로 고칠 수 있어요 😊';
+    track('generate', { edited: S.codeHistory });
     S.codeHistory = true;
     refreshMe();
   }catch(err){
@@ -406,26 +418,48 @@ $('btnDownload').onclick = ()=>{
   toast('저장했어요! 더블클릭하면 어디서든 열려요 🎉');
 };
 
-/* 구독 */
-$('btnSubscribe').onclick = ()=>{
-  $('payTitle').textContent = '말로 프로 시작하기';
-  $('paySub').textContent = '30분 무료 체험 후 월 9,900원. 언제든 해지할 수 있어요.';
-  $('payModal').classList.remove('hidden');
-};
-$('btnPay').onclick = async ()=>{
-  // TODO: 실서비스에선 여기서 토스페이먼츠 결제위젯을 띄움 (api/subscribe.js 주석 참고)
+/* 피드백 / 베타 안내 */
+function updateStars(){
+  document.querySelectorAll('#fbStars .star').forEach(s=>{
+    s.style.color = (Number(s.dataset.v) <= (S.fbRating||0)) ? '#ffb400' : '#d6dce3';
+  });
+}
+document.querySelectorAll('#fbStars .star').forEach(s=>{
+  s.onclick = ()=>{ S.fbRating = Number(s.dataset.v); updateStars(); };
+});
+function openFeedback(beta){
+  if(beta){
+    $('fbTitle').textContent = '30분 체험이 끝났어요 🧪';
+    $('fbSub').textContent = '말로는 아직 베타 테스트 버전이에요. 지금은 결제 없이 준비 중이고, 정식 오픈하면 알려드릴게요. 써보신 후기를 남겨 주시면 큰 힘이 됩니다!';
+  } else {
+    $('fbTitle').textContent = '의견을 들려주세요 💬';
+    $('fbSub').textContent = '말로는 지금 베타 테스트 중이에요. 좋았던 점·불편한 점·만들고 싶은 기능 뭐든 적어 주세요!';
+  }
+  $('fbModal').classList.remove('hidden');
+  setTimeout(()=>$('fbText').focus(), 50);
+}
+$('btnFeedback').onclick = ()=> openFeedback(false);
+$('btnFbClose').onclick = ()=> $('fbModal').classList.add('hidden');
+$('btnFbSend').onclick = async ()=>{
+  const msg = $('fbText').value.trim();
+  if(!msg){ toast('내용을 입력해 주세요'); return; }
+  if(!S.session){ toast('로그인이 필요해요'); return; }
+  const btn = $('btnFbSend');
+  btn.disabled = true;
   try{
-    const res = await fetch('/api/subscribe', {
+    const res = await fetch('/api/feedback', {
       method:'POST',
-      headers:{ authorization:`Bearer ${S.session.access_token}` }
+      headers:{ 'content-type':'application/json', authorization:`Bearer ${S.session.access_token}` },
+      body: JSON.stringify({ message: msg, rating: S.fbRating || null })
     });
     if(!res.ok) throw new Error();
-    $('payModal').classList.add('hidden');
-    await refreshMe();
-    toast('(데모) 구독 처리됐어요. 실서비스에선 토스페이먼츠 결제창이 떠요');
-  }catch(e){ toast('구독 처리에 실패했어요'); }
+    track('feedback_submit', { rating: S.fbRating || 0 });
+    $('fbModal').classList.add('hidden');
+    $('fbText').value = ''; S.fbRating = 0; updateStars();
+    toast('소중한 의견 감사해요! 🙏');
+  }catch(e){ toast('전송에 실패했어요. 잠시 후 다시 시도해 주세요'); }
+  finally{ btn.disabled = false; }
 };
-$('btnPayClose').onclick = ()=> $('payModal').classList.add('hidden');
 
 /* ================== 시작 ================== */
 initAuth();

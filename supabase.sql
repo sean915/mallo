@@ -62,3 +62,16 @@ begin
   update public.profiles set usage_count = p.usage_count + 1 where id = uid;
   return json_build_object('allowed', true, 'remaining', monthly_limit - p.usage_count - 1);
 end $$;
+
+-- 사용자 피드백/후기
+create table if not exists public.feedback (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete set null,
+  email text,
+  message text not null,
+  rating int,
+  created_at timestamptz not null default now()
+);
+
+alter table public.feedback enable row level security;
+-- 공개 정책 없음: API(service_role)만 기록·조회. 피드백 열람은 Supabase 대시보드 Table Editor에서.
