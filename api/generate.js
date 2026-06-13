@@ -102,7 +102,8 @@ export default async function handler(req) {
   }
 
   if (!upstream.ok) {
-    return json({ error: `AI 호출에 실패했어요 (${upstream.status}). 잠시 후 다시 시도해 주세요.` }, 502);
+    const detail = await upstream.text().catch(() => '');
+    return json({ error: `AI 호출 실패 (${upstream.status}): ${detail.slice(0, 400)}` }, 502);
   }
 
   // 5. 어떤 LLM이든 동일한 형식(data: {"t":"..."})으로 변환해 스트리밍
