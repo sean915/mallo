@@ -4,16 +4,22 @@ import { json, env, getUser, sb } from './_lib.js';
 export const config = { runtime: 'edge' };
 
 const TRIAL_MINUTES = 30;
+// 마스터(무제한) 계정 — 이메일 기준으로도 보장
+const MASTER_EMAILS = ['seanhh915@gmail.com'];
 
 export default async function handler(req) {
   try {
     const user = await getUser(req);
     if (!user) return json({ error: '로그인이 필요해요' }, 401);
 
+    const isMaster = MASTER_EMAILS.includes(String(user.email || '').toLowerCase());
+
     let p = null;
+    let dbg = '';
     try {
       let res = await sb(`profiles?id=eq.${user.id}&select=*`);
       let rows = await res.json();
+      dbg = 'sel:' + res.status + '/' + (Array.isArray(rows) ? rows.length : ('obj:' + JSON.stringify(rows).slice(0, 120)));
       if (!Array.isArray(rows) || rows.length === 0) {
         await sb('profiles', {
           method: 'POST',
@@ -24,7 +30,7 @@ export default async function handler(req) {
         rows = await res.json();
       }
       if (Array.isArray(rows) && rows.length > 0) p = rows[0];
-    } catch (e) { /* 프로필 조회 실패 시 기본값으로 진행 */ }
+    } catch (e) { dbg = 'err:' + String(e && e.message || e); }
 
     if (!p) {
       p = { created_at: new Date().toISOString(), subscribed: false, unlimited: false, usage_month: '', usage_count: 0 };
@@ -40,10 +46,11 @@ export default async function handler(req) {
     return json({
       email: user.email,
       subscribed: !!p.subscribed,
-      unlimited: !!p.unlimited,
+      unlimited: isMaster || !!p.unlimited,
       trialLeft,
       used,
       limit,
+      _dbg: dbg,
     });
   } catch (e) {
     return json({ error: '상태 조회 중 오류', detail: String(e && e.message || e) }, 500);
