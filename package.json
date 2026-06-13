@@ -1,0 +1,10 @@
+{
+  "name": "mallo",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "말로 — 한국말로 만드는 앱",
+  "engines": {
+    "node": ">=18"
+  }
+}

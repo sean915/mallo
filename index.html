@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>말로 — 한국말로 만드는 앱</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<style>
+  :root{
+    --bg:#f2f4f6; --card:#ffffff; --ink:#191f28; --sub:#6b7684; --line:#e5e8eb;
+    --blue:#3182f6; --blue-dark:#1b64da; --blue-bg:#e8f3ff;
+    --red:#f04452; --green:#04c75a;
+    --radius:16px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{font-family:Pretendard,-apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;background:var(--bg);color:var(--ink);overflow:hidden}
+  button{font-family:inherit;cursor:pointer;border:none;background:none}
+  input,textarea{font-family:inherit}
+
+  header{height:60px;background:var(--card);border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 20px;gap:14px}
+  .logo{font-size:22px;font-weight:800;letter-spacing:-0.5px}
+  .logo b{color:var(--blue)}
+  .tagline{font-size:13px;color:var(--sub)}
+  .spacer{flex:1}
+  .trial-badge{background:var(--blue-bg);color:var(--blue-dark);font-size:13px;font-weight:700;padding:7px 14px;border-radius:99px}
+  .trial-badge.expired{background:#ffeaec;color:var(--red)}
+  .hbtn{font-size:14px;font-weight:600;color:var(--sub);padding:8px 12px;border-radius:10px}
+  .hbtn:hover{background:var(--bg)}
+  .hbtn.primary{background:var(--blue);color:#fff}
+  .hbtn.primary:hover{background:var(--blue-dark)}
+
+  .main{display:flex;height:calc(100% - 60px)}
+  .left{width:420px;min-width:340px;display:flex;flex-direction:column;background:var(--card);border-right:1px solid var(--line)}
+  .right{flex:1;display:flex;flex-direction:column;background:#fff}
+
+  .chat{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:14px}
+  .msg{max-width:88%;padding:12px 16px;border-radius:18px;font-size:15px;line-height:1.55;white-space:pre-wrap;word-break:break-word}
+  .msg.user{align-self:flex-end;background:var(--blue);color:#fff;border-bottom-right-radius:6px}
+  .msg.bot{align-self:flex-start;background:var(--bg);border-bottom-left-radius:6px}
+  .msg.bot.err{background:#ffeaec;color:#c2273a}
+  .msg.bot.working .dots::after{content:'';animation:dots 1.4s infinite}
+  @keyframes dots{0%{content:''}25%{content:'.'}50%{content:'..'}75%{content:'...'}}
+
+  .welcome{padding:28px 20px 6px}
+  .welcome h2{font-size:21px;font-weight:800;letter-spacing:-0.4px;line-height:1.4}
+  .welcome p{font-size:14px;color:var(--sub);margin-top:8px;line-height:1.6}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;padding:14px 20px}
+  .chip{font-size:13.5px;font-weight:600;color:var(--blue-dark);background:var(--blue-bg);padding:9px 14px;border-radius:99px;transition:.15s}
+  .chip:hover{background:#d6e9ff;transform:translateY(-1px)}
+
+  .inputbar{padding:14px 16px 18px;border-top:1px solid var(--line)}
+  .inputbox{display:flex;align-items:flex-end;gap:8px;background:var(--bg);border-radius:var(--radius);padding:10px 10px 10px 16px;border:2px solid transparent;transition:.15s}
+  .inputbox:focus-within{border-color:var(--blue);background:#fff}
+  .inputbox textarea{flex:1;border:none;outline:none;background:transparent;resize:none;font-size:15px;line-height:1.5;max-height:120px;color:var(--ink)}
+  .send{width:40px;height:40px;border-radius:12px;background:var(--blue);color:#fff;font-size:17px;flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:.15s}
+  .send:hover{background:var(--blue-dark)}
+  .send:disabled{background:#c9d2dc;cursor:not-allowed}
+  .hint{font-size:12px;color:#8b95a1;margin-top:8px;text-align:center}
+
+  .preview-head{height:48px;display:flex;align-items:center;gap:10px;padding:0 16px;border-bottom:1px solid var(--line);background:#fafbfc}
+  .live-dot{width:8px;height:8px;border-radius:50%;background:#c9d2dc}
+  .live-dot.on{background:var(--green);box-shadow:0 0 0 4px rgba(4,199,90,.15);animation:pulse 1.2s infinite}
+  @keyframes pulse{50%{box-shadow:0 0 0 7px rgba(4,199,90,.08)}}
+  .preview-title{font-size:14px;font-weight:700;color:var(--sub)}
+  .pbtn{font-size:13px;font-weight:600;color:var(--sub);padding:6px 12px;border-radius:8px;border:1px solid var(--line);background:#fff}
+  .pbtn:hover{background:var(--bg)}
+  .preview-wrap{flex:1;position:relative;background:repeating-conic-gradient(#f7f8fa 0% 25%, #fff 0% 50%) 0 0/24px 24px}
+  iframe{width:100%;height:100%;border:none;background:#fff}
+  .empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#fff}
+  .empty .big{font-size:52px}
+  .empty h3{font-size:19px;font-weight:800;letter-spacing:-0.3px}
+  .empty p{font-size:14px;color:var(--sub);text-align:center;line-height:1.7}
+
+  .overlay{position:fixed;inset:0;background:rgba(25,31,40,.55);display:flex;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(2px)}
+  .modal{background:#fff;border-radius:24px;padding:32px;width:min(440px,92vw);max-height:88vh;overflow-y:auto;box-shadow:0 24px 60px rgba(0,0,0,.2)}
+  .modal h2{font-size:22px;font-weight:800;letter-spacing:-0.4px}
+  .modal .sub{font-size:14px;color:var(--sub);margin-top:8px;line-height:1.6}
+  .bigbtn{width:100%;margin-top:20px;padding:15px;border-radius:14px;background:var(--blue);color:#fff;font-size:16px;font-weight:700;transition:.15s}
+  .bigbtn:hover{background:var(--blue-dark)}
+  .bigbtn.gray{background:var(--bg);color:var(--sub);margin-top:10px}
+  .bigbtn.google{background:#fff;color:var(--ink);border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center;gap:10px}
+  .bigbtn.google:hover{background:var(--bg)}
+
+  /* 로그인 화면 */
+  .login-hero{text-align:center;padding:8px 0 4px}
+  .login-hero .biglogo{font-size:44px;font-weight:800;letter-spacing:-1px}
+  .login-hero .biglogo b{color:var(--blue)}
+  .login-hero p{font-size:15px;color:var(--sub);margin-top:10px;line-height:1.7}
+  .login-feats{display:flex;gap:8px;margin-top:22px}
+  .lfeat{flex:1;background:var(--bg);border-radius:14px;padding:14px 8px;text-align:center}
+  .lfeat .ic{font-size:22px}
+  .lfeat .tx{font-size:12.5px;font-weight:600;color:var(--sub);margin-top:6px;line-height:1.4}
+
+  .price{text-align:center;margin:22px 0}
+  .price .won{font-size:40px;font-weight:800;letter-spacing:-1px}
+  .price .per{font-size:15px;color:var(--sub);font-weight:600}
+  .feat{list-style:none;margin-top:4px}
+  .feat li{font-size:14.5px;padding:9px 0;display:flex;gap:10px;align-items:center;border-bottom:1px solid #f4f5f7}
+  .feat li::before{content:'✓';color:var(--green);font-weight:800}
+
+  .toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(80px);background:#191f28;color:#fff;font-size:14px;font-weight:600;padding:13px 22px;border-radius:99px;z-index:200;opacity:0;transition:.3s}
+  .toast.show{transform:translateX(-50%) translateY(0);opacity:1}
+  .hidden{display:none !important}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">말<b>로</b></div>
+  <div class="tagline">한국말로 말하면, 앱이 됩니다</div>
+  <div class="spacer"></div>
+  <div class="trial-badge hidden" id="trialBadge"></div>
+  <button class="hbtn primary hidden" id="btnSubscribe">구독하기</button>
+  <button class="hbtn hidden" id="btnLogout">로그아웃</button>
+</header>
+
+<div class="main">
+  <div class="left">
+    <div class="welcome" id="welcome">
+      <h2>어떤 걸 만들어 드릴까요? 🛠️</h2>
+      <p>코딩은 몰라도 됩니다. 만들고 싶은 걸 그냥 한국말로 적어 주세요. 코드는 저희가 알아서 처리하고, 결과물만 보여드려요.</p>
+    </div>
+    <div class="chips" id="chips">
+      <button class="chip">📋 할 일 관리 앱 만들어줘</button>
+      <button class="chip">💸 한 달 가계부 만들어줘</button>
+      <button class="chip">🎲 점심 메뉴 룰렛 만들어줘</button>
+      <button class="chip">⏰ 포모도로 타이머 만들어줘</button>
+      <button class="chip">🪜 사다리타기 게임 만들어줘</button>
+    </div>
+    <div class="chat" id="chat"></div>
+    <div class="inputbar">
+      <div class="inputbox">
+        <textarea id="input" rows="1" placeholder="예) 버튼 누르면 명언 나오는 앱 만들어줘"></textarea>
+        <button class="send" id="btnSend" title="만들기">↑</button>
+      </div>
+      <div class="hint">Enter로 전송 · Shift+Enter 줄바꿈 · 만든 후에도 "버튼을 더 크게 해줘"처럼 말로 고칠 수 있어요</div>
+    </div>
+  </div>
+
+  <div class="right">
+    <div class="preview-head">
+      <div class="live-dot" id="liveDot"></div>
+      <div class="preview-title" id="previewTitle">실시간 미리보기</div>
+      <div class="spacer"></div>
+      <button class="pbtn" id="btnNew">＋ 새로 만들기</button>
+      <button class="pbtn" id="btnDownload">⬇ 내 컴퓨터에 저장</button>
+    </div>
+    <div class="preview-wrap">
+      <iframe id="frame" sandbox="allow-scripts allow-modals allow-forms allow-popups"></iframe>
+      <div class="empty" id="empty">
+        <div class="big">💬</div>
+        <h3>아직 만든 게 없어요</h3>
+        <p>왼쪽에 만들고 싶은 걸 한국말로 적으면<br>여기에 결과물이 실시간으로 나타나요.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 로그인 모달 -->
+<div class="overlay" id="loginModal">
+  <div class="modal">
+    <div class="login-hero">
+      <div class="biglogo">말<b>로</b></div>
+      <p>코딩 1도 몰라도 됩니다.<br>한국말로 말하면 앱이 나와요.</p>
+    </div>
+    <div class="login-feats">
+      <div class="lfeat"><div class="ic">💬</div><div class="tx">한국말로<br>만들기</div></div>
+      <div class="lfeat"><div class="ic">⚡</div><div class="tx">실시간<br>미리보기</div></div>
+      <div class="lfeat"><div class="ic">🎁</div><div class="tx">30분<br>무료 체험</div></div>
+    </div>
+    <button class="bigbtn google" id="btnGoogle">
+      <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3l5.7-5.7C34.3 6.1 29.4 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.6-.4-3.9z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 15.1 18.9 12 24 12c3.1 0 5.9 1.2 8 3l5.7-5.7C34.3 6.1 29.4 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.3 0-9.7-3.4-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C36.9 39.2 44 34 44 24c0-1.3-.1-2.6-.4-3.9z"/></svg>
+      구글로 3초 만에 시작하기
+    </button>
+    <p class="sub" style="text-align:center;margin-top:14px">가입 즉시 30분 무료 · 이후 월 9,900원 · 언제든 해지</p>
+  </div>
+</div>
+
+<!-- 구독 페이월 모달 -->
+<div class="overlay hidden" id="payModal">
+  <div class="modal">
+    <h2 id="payTitle">말로 프로 시작하기</h2>
+    <p class="sub" id="paySub">30분 무료 체험 후에는 구독이 필요해요.</p>
+    <div class="price"><span class="won">9,900원</span> <span class="per">/ 월</span></div>
+    <ul class="feat">
+      <li>매달 앱 만들기 100회</li>
+      <li>한국말로 무한 수정</li>
+      <li>결과물 파일 저장 무제한</li>
+      <li>언제든 해지 가능</li>
+    </ul>
+    <button class="bigbtn" id="btnPay">월 9,900원으로 시작하기</button>
+    <button class="bigbtn gray" id="btnPayClose">나중에 할게요</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script type="module">
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+
+/* ================== 상태 ================== */
+const S = { supabase:null, session:null, code:'', codeHistory:false, busy:false, me:null };
+const $ = id => document.getElementById(id);
+
+/* ================== UI 유틸 ================== */
+function toast(msg){
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(t._tm); t._tm = setTimeout(()=>t.classList.remove('show'), 2600);
+}
+function addMsg(role, text, cls=''){
+  const d = document.createElement('div');
+  d.className = `msg ${role} ${cls}`;
+  d.textContent = text;
+  $('chat').appendChild(d);
+  $('chat').scrollTop = $('chat').scrollHeight;
+  return d;
+}
+const WORKING_STEPS = ['요구사항을 읽고 있어요','설계하는 중이에요','만드는 중이에요','화면을 그리는 중이에요','마무리하는 중이에요'];
+
+/* ================== 미리보기 ================== */
+function extractHtml(text){
+  const i = text.indexOf('```html');
+  if(i === -1){
+    const j = text.indexOf('<!DOCTYPE');
+    return j !== -1 ? text.slice(j).replace(/```\s*$/,'') : '';
+  }
+  let body = text.slice(i + 7);
+  const end = body.indexOf('```');
+  if(end !== -1) body = body.slice(0, end);
+  return body.trim();
+}
+let lastRender = 0;
+function renderPreview(html, force=false){
+  if(!html) return;
+  const now = Date.now();
+  if(!force && now - lastRender < 700) return;
+  lastRender = now;
+  $('empty').classList.add('hidden');
+  $('frame').srcdoc = html;
+}
+
+/* ================== 인증 ================== */
+async function initAuth(){
+  const cfg = await (await fetch('/api/config')).json();
+  S.supabase = createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
+  const { data:{ session } } = await S.supabase.auth.getSession();
+  setSession(session);
+  S.supabase.auth.onAuthStateChange((_e, sess)=> setSession(sess));
+}
+function setSession(session){
+  S.session = session;
+  const loggedIn = !!session;
+  $('loginModal').classList.toggle('hidden', loggedIn);
+  $('btnLogout').classList.toggle('hidden', !loggedIn);
+  $('btnSubscribe').classList.toggle('hidden', !loggedIn);
+  $('trialBadge').classList.toggle('hidden', !loggedIn);
+  if(loggedIn) refreshMe();
+}
+async function refreshMe(){
+  try{
+    const res = await fetch('/api/me', { headers:{ authorization:`Bearer ${S.session.access_token}` } });
+    if(!res.ok) return;
+    S.me = await res.json();
+    const b = $('trialBadge');
+    if(S.me.subscribed){
+      b.textContent = `프로 ✨ ${S.me.used}/${S.me.limit}회`;
+      b.classList.remove('expired');
+      $('btnSubscribe').classList.add('hidden');
+    } else if(S.me.trialLeft > 0){
+      b.textContent = `무료 체험 ${S.me.trialLeft}분 남음`;
+      b.classList.remove('expired');
+    } else {
+      b.textContent = '체험 종료';
+      b.classList.add('expired');
+    }
+  }catch(e){}
+}
+$('btnGoogle').onclick = ()=> S.supabase.auth.signInWithOAuth({
+  provider:'google',
+  options:{ redirectTo: location.origin }
+});
+$('btnLogout').onclick = async ()=>{ await S.supabase.auth.signOut(); location.reload(); };
+
+/* ================== 생성 플로우 ================== */
+async function generate(req){
+  if(S.busy || !S.session) return;
+  S.busy = true;
+  $('btnSend').disabled = true;
+  $('welcome').classList.add('hidden');
+  $('chips').classList.add('hidden');
+  addMsg('user', req);
+  const botMsg = addMsg('bot', '', 'working');
+  botMsg.innerHTML = '<span class="stepText">' + WORKING_STEPS[0] + '</span><span class="dots"></span>';
+  let stepIdx = 0;
+  const stepTimer = setInterval(()=>{
+    stepIdx = Math.min(stepIdx+1, WORKING_STEPS.length-1);
+    const el = botMsg.querySelector('.stepText');
+    if(el) el.textContent = WORKING_STEPS[stepIdx];
+  }, 3500);
+
+  $('liveDot').classList.add('on');
+  $('previewTitle').textContent = '실시간으로 만들어지는 중...';
+
+  let acc = '';
+  try{
+    const res = await fetch('/api/generate', {
+      method:'POST',
+      headers:{
+        'content-type':'application/json',
+        authorization:`Bearer ${S.session.access_token}`
+      },
+      body: JSON.stringify({ prompt:req, code:S.code || undefined })
+    });
+
+    if(!res.ok){
+      let err = {};
+      try{ err = await res.json(); }catch(e){}
+      if(err.code === 'trial_over'){
+        $('payTitle').textContent = '무료 체험이 끝났어요 🥲';
+        $('paySub').textContent = '계속 만들려면 구독이 필요해요. 월 9,900원, 언제든 해지할 수 있어요.';
+        $('payModal').classList.remove('hidden');
+      }
+      throw new Error(err.error || '문제가 생겼어요. 다시 시도해 주세요.');
+    }
+
+    // 통일된 SSE 수신: data: {"t":"..."} / data: [DONE]
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    while(true){
+      const {done, value} = await reader.read();
+      if(done) break;
+      buf += dec.decode(value, {stream:true});
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for(const line of lines){
+        if(!line.startsWith('data:')) continue;
+        const data = line.slice(5).trim();
+        if(!data || data === '[DONE]') continue;
+        try{
+          const j = JSON.parse(data);
+          if(j.error) throw new Error(j.error);
+          if(j.t){ acc += j.t; renderPreview(extractHtml(acc)); }
+        }catch(e){ if(e.message && !e.message.includes('JSON')) throw e; }
+      }
+    }
+
+    const html = extractHtml(acc);
+    if(!html) throw new Error('결과를 만들지 못했어요. 조금 더 구체적으로 말씀해 주시겠어요?');
+    S.code = html;
+    renderPreview(html, true);
+    clearInterval(stepTimer);
+    botMsg.classList.remove('working');
+    botMsg.textContent = S.codeHistory
+      ? '수정했어요! 오른쪽에서 확인해 보세요. 더 고치고 싶은 게 있으면 말씀해 주세요 😊'
+      : '완성했어요! 오른쪽에서 바로 써보세요. 마음에 안 드는 부분은 말로 고칠 수 있어요 😊';
+    S.codeHistory = true;
+    refreshMe();
+  }catch(err){
+    clearInterval(stepTimer);
+    botMsg.classList.remove('working');
+    botMsg.classList.add('err');
+    botMsg.textContent = err.message || '알 수 없는 오류가 났어요. 다시 시도해 주세요.';
+  }finally{
+    $('previewTitle').textContent = '실시간 미리보기';
+    $('liveDot').classList.remove('on');
+    S.busy = false;
+    $('btnSend').disabled = false;
+  }
+}
+
+/* ================== 이벤트 ================== */
+const input = $('input');
+function submit(){
+  const v = input.value.trim();
+  if(!v || S.busy) return;
+  input.value = ''; input.style.height = 'auto';
+  generate(v);
+}
+$('btnSend').onclick = submit;
+input.addEventListener('keydown', e=>{
+  if(e.key === 'Enter' && !e.shiftKey && !e.isComposing){ e.preventDefault(); submit(); }
+});
+input.addEventListener('input', ()=>{ input.style.height='auto'; input.style.height = Math.min(input.scrollHeight,120)+'px'; });
+
+document.querySelectorAll('.chip').forEach(c => c.onclick = ()=> generate(c.textContent.replace(/^[^\s]+\s/,'')));
+
+$('btnNew').onclick = ()=>{
+  if(S.busy) return;
+  S.code = ''; S.codeHistory = false;
+  $('chat').innerHTML = '';
+  $('frame').srcdoc = '';
+  $('empty').classList.remove('hidden');
+  $('welcome').classList.remove('hidden');
+  $('chips').classList.remove('hidden');
+};
+
+$('btnDownload').onclick = ()=>{
+  if(!S.code){ toast('아직 만든 앱이 없어요'); return; }
+  const blob = new Blob([S.code], {type:'text/html'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '내가만든앱.html';
+  a.click();
+  toast('저장했어요! 더블클릭하면 어디서든 열려요 🎉');
+};
+
+/* 구독 */
+$('btnSubscribe').onclick = ()=>{
+  $('payTitle').textContent = '말로 프로 시작하기';
+  $('paySub').textContent = '30분 무료 체험 후 월 9,900원. 언제든 해지할 수 있어요.';
+  $('payModal').classList.remove('hidden');
+};
+$('btnPay').onclick = async ()=>{
+  // TODO: 실서비스에선 여기서 토스페이먼츠 결제위젯을 띄움 (api/subscribe.js 주석 참고)
+  try{
+    const res = await fetch('/api/subscribe', {
+      method:'POST',
+      headers:{ authorization:`Bearer ${S.session.access_token}` }
+    });
+    if(!res.ok) throw new Error();
+    $('payModal').classList.add('hidden');
+    await refreshMe();
+    toast('(데모) 구독 처리됐어요. 실서비스에선 토스페이먼츠 결제창이 떠요');
+  }catch(e){ toast('구독 처리에 실패했어요'); }
+};
+$('btnPayClose').onclick = ()=> $('payModal').classList.add('hidden');
+
+/* ================== 시작 ================== */
+initAuth();
+</script>
+</body>
+</html>
