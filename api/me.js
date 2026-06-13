@@ -33,6 +33,7 @@ export default async function handler(req) {
   return json({
     email: user.email,
     subscribed: p.subscribed,
+    unlimited: !!p.unlimited,
     trialLeft,
     used,
     limit,
