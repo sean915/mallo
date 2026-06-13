@@ -278,7 +278,10 @@ async function refreshMe(){
     if(!res.ok) return;
     S.me = await res.json();
     const b = $('trialBadge');
-    if(S.me.trialLeft > 0){
+    if(S.me.unlimited){
+      b.textContent = '♾️ 무제한 (마스터)';
+      b.classList.remove('expired');
+    } else if(S.me.trialLeft > 0){
       b.textContent = `🧪 베타 체험 ${S.me.trialLeft}분 남음`;
       b.classList.remove('expired');
     } else {
