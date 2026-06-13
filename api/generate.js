@@ -95,10 +95,16 @@ export default async function handler(req) {
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
           contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+          generationConfig: { thinkingConfig: { thinkingBudget: 0 }, maxOutputTokens: 8192 },
         }),
       }
     );
-    extract = (j) => j.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
+    extract = (j) => {
+      const parts = j.candidates?.[0]?.content?.parts;
+      if (!Array.isArray(parts)) return null;
+      const t = parts.map((p) => p.text).filter(Boolean).join('');
+      return t || null;
+    };
   }
 
   if (!upstream.ok) {
