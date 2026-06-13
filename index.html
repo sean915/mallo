@@ -119,14 +119,13 @@
   <div class="left">
     <div class="welcome" id="welcome">
       <h2>어떤 걸 만들어 드릴까요? 🛠️</h2>
-      <p>코딩은 몰라도 됩니다. 만들고 싶은 걸 그냥 한국말로 적어 주세요. 코드는 저희가 알아서 처리하고, 결과물만 보여드려요.</p>
+      <p>아래에서 만들고 싶은 종류를 고르면 추천 문구가 입력창에 채워져요. 그대로 보내거나, 원하는 대로 고쳐서 보내면 완성본이 만들어집니다.</p>
     </div>
     <div class="chips" id="chips">
-      <button class="chip">📋 할 일 관리 앱 만들어줘</button>
-      <button class="chip">💸 한 달 가계부 만들어줘</button>
-      <button class="chip">🎲 점심 메뉴 룰렛 만들어줘</button>
-      <button class="chip">⏰ 포모도로 타이머 만들어줘</button>
-      <button class="chip">🪜 사다리타기 게임 만들어줘</button>
+      <button class="chip" data-prompt="소규모 가게용 재고관리 프로그램 만들어줘. 상품 등록(이름·카테고리·수량·단가), 목록 표와 검색, 수량 +/- 버튼, 재고 5개 이하 빨간 표시, 총 재고 수량과 재고 금액 요약, 상품 추가·수정·삭제, CSV로 내보내기. 입력한 내용은 자동 저장돼서 다시 열어도 남아 있게 해줘.">🗂️ 사무용 관리도구</button>
+      <button class="chip" data-prompt="옷가게 온라인 쇼핑몰 화면 만들어줘. 상품 카드 목록(사진·이름·가격·담기 버튼), 장바구니(수량 조절·합계·삭제), 주문서 작성 폼(이름·연락처·주소·요청사항), 주문 완료 화면까지. 깔끔하고 모바일에서도 예쁘게, 결제는 데모로 처리해줘.">🛍️ 쇼핑몰·판매</button>
+      <button class="chip" data-prompt="한 손으로 즐기는 캐주얼 게임 만들어줘. 떨어지는 아이템을 좌우로 움직여 받는 방식으로, 점수와 최고점수, 시작/다시하기 버튼, 시간이 지날수록 빨라지는 난이도, 부드러운 애니메이션의 깔끔한 디자인으로.">🎮 게임</button>
+      <button class="chip" data-prompt="카페 홍보용 한 페이지 홈페이지 만들어줘. 상단 히어로(가게 이름·한 줄 소개·예약 버튼), 대표 메뉴 소개 카드, 사진 갤러리, 영업시간, 오시는 길(지도 자리), 인스타그램 링크. 따뜻한 색감에 모바일에서도 예쁜 반응형으로.">🏠 홈페이지·랜딩·도구</button>
     </div>
     <div class="chat" id="chat"></div>
     <div class="inputbar">
@@ -396,7 +395,14 @@ input.addEventListener('keydown', e=>{
 });
 input.addEventListener('input', ()=>{ input.style.height='auto'; input.style.height = Math.min(input.scrollHeight,120)+'px'; });
 
-document.querySelectorAll('.chip').forEach(c => c.onclick = ()=> generate(c.textContent.replace(/^[^\s]+\s/,'')));
+document.querySelectorAll('.chip').forEach(c => c.onclick = ()=>{
+  const p = c.dataset.prompt || c.textContent.replace(/^[^\s]+\s/,'');
+  input.value = p;
+  input.style.height = 'auto';
+  input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+  input.focus();
+  input.setSelectionRange(input.value.length, input.value.length);
+});
 
 $('btnNew').onclick = ()=>{
   if(S.busy) return;
