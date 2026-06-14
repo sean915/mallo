@@ -118,6 +118,16 @@
   .feat li{font-size:14.5px;padding:9px 0;display:flex;gap:10px;align-items:center;border-bottom:1px solid #f4f5f7}
   .feat li::before{content:'✓';color:var(--green);font-weight:800}
 
+  /* 구독 플랜 선택 */
+  .planbox{display:flex;flex-direction:column;gap:9px;margin-top:18px}
+  .plan{display:flex;align-items:center;justify-content:space-between;gap:10px;border:1.5px solid var(--line);border-radius:14px;padding:13px 16px;text-align:left;transition:.15s}
+  .plan:hover{border-color:var(--blue);background:var(--blue-bg);transform:translateY(-1px)}
+  .plan .pn{font-size:15px;font-weight:800;color:var(--ink)}
+  .plan .pd{font-size:12px;color:var(--sub);margin-top:2px}
+  .plan .pv{font-size:16px;font-weight:800;color:var(--blue);white-space:nowrap}
+  .plan.best{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-bg)}
+  .plan .badge{font-size:10px;font-weight:800;color:#fff;background:var(--blue);border-radius:6px;padding:2px 6px;margin-left:6px;vertical-align:middle}
+
   .toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(80px);background:#191f28;color:#fff;font-size:14px;font-weight:600;padding:13px 22px;border-radius:99px;z-index:200;opacity:0;transition:.3s}
   .toast.show{transform:translateX(-50%) translateY(0);opacity:1}
   .hidden{display:none !important}
@@ -264,7 +274,7 @@
       <span class="star" data-v="5" style="cursor:pointer;color:#d6dce3">★</span>
     </div>
     <textarea id="fbText" rows="4" placeholder="자유롭게 후기를 남겨 주세요 (예: 어떤 앱을 만들고 싶었는지, 아쉬운 점)" style="width:100%;border:2px solid var(--line);border-radius:12px;padding:12px 14px;font-size:15px;font-family:inherit;line-height:1.5;resize:none;outline:none;box-sizing:border-box"></textarea>
-    <button class="bigbtn hidden" id="btnSubscribe" style="background:#FEE500;color:#191600;font-weight:800">💳 카카오페이로 구독하기</button>
+    <div class="planbox hidden" id="planBox"></div>
     <button class="bigbtn" id="btnFbSend">보내기</button>
     <button class="bigbtn gray" id="btnFbClose">닫기</button>
   </div>
@@ -489,35 +499,52 @@ $('btnKakao').onclick = ()=> S.supabase.auth.signInWithOAuth({
 $('btnLogout').onclick = async ()=>{ await S.supabase.auth.signOut(); location.reload(); };
 
 /* ================== 결제(포트원 · 카카오페이 정기결제) ================== */
-async function startSubscribe(){
+// 모달에 플랜 카드 렌더링
+function renderPlans(){
+  const box = $('planBox'); if(!box) return;
+  const plans = (S.cfg && S.cfg.plans) || {};
+  box.innerHTML = '';
+  Object.entries(plans).forEach(([id, p], i)=>{
+    const b = document.createElement('button');
+    b.className = 'plan' + (id === 'standard' ? ' best' : '');
+    const badge = id === 'standard' ? '<span class="badge">인기</span>' : '';
+    b.innerHTML = '<div><div class="pn">'+p.name+badge+'</div><div class="pd">월 만들기 '+p.limit+'회 · 만든 도구 사용은 무제한</div></div><div class="pv">'+p.price.toLocaleString()+'원</div>';
+    b.onclick = ()=> startSubscribe(id);
+    box.appendChild(b);
+  });
+}
+async function startSubscribe(planId){
   if(!payConfigured()){ toast('결제 준비 중이에요'); return; }
   if(!S.session){ toast('로그인이 필요해요'); return; }
   if(!window.PortOne){ toast('결제 모듈을 불러오는 중이에요. 잠시 후 다시 눌러주세요'); return; }
-  const btn = $('btnSubscribe'); btn.disabled = true;
+  if(S.subBusy) return; S.subBusy = true;
+  const plan = (S.cfg.plans && S.cfg.plans[planId]) || {};
   try{
+    try{ localStorage.setItem('mallo_plan', planId); }catch(e){}   // 모바일 복귀 시 플랜 기억
     const rsp = await PortOne.requestIssueBillingKey({
       storeId: S.cfg.payStoreId,
       channelKey: S.cfg.payChannelKey,
       billingKeyMethod: 'EASY_PAY',
       issueId: `mallo-${Date.now()}`,
-      issueName: S.cfg.payName || '말로 월 구독',
+      issueName: '말로 ' + (plan.name || '') + ' 구독',
       customer: { customerId: S.session.user.id, email: S.session.user.email },
       redirectUrl: location.origin + '/?pay=return',   // 모바일에서 카카오페이 후 복귀
     });
     if(!rsp || rsp.code != null){ toast('결제가 취소됐어요'); return; }   // 데스크톱(팝업) 경로
-    await activateWithBillingKey(rsp.billingKey);
+    await activateWithBillingKey(rsp.billingKey, planId);
   }catch(e){ toast('결제 중 문제가 생겼어요. 잠시 후 다시 시도해 주세요'); }
-  finally{ btn.disabled = false; }
+  finally{ S.subBusy = false; }
 }
-async function activateWithBillingKey(billingKey){
+async function activateWithBillingKey(billingKey, planId){
   if(!billingKey || !S.session) return;
   const res = await fetch('/api/subscribe', {
     method:'POST',
     headers:{ 'content-type':'application/json', authorization:`Bearer ${S.session.access_token}` },
-    body: JSON.stringify({ billingKey })
+    body: JSON.stringify({ billingKey, planId })
   });
   if(!res.ok){ toast('결제에 실패했어요. 카카오페이 한도를 확인해 주세요'); return; }
-  track('subscribe');
+  track('subscribe', { plan: planId });
+  try{ localStorage.removeItem('mallo_plan'); }catch(e){}
   $('fbModal').classList.add('hidden');
   await refreshMe();
   toast('구독 완료! 이제 계속 만들 수 있어요 🎉');
@@ -527,8 +554,10 @@ function handlePayReturn(){
   const q = new URLSearchParams(location.search);
   if(q.get('pay') !== 'return') return;
   const bk = q.get('billingKey');
+  let planId = 'light';
+  try{ planId = localStorage.getItem('mallo_plan') || 'light'; }catch(e){}
   history.replaceState({}, '', location.origin + location.pathname);
-  if(bk && S.session){ activateWithBillingKey(bk); }
+  if(bk && S.session){ activateWithBillingKey(bk, planId); }
   else if(q.get('code')){ toast('결제가 취소됐어요'); }
 }
 
@@ -700,18 +729,12 @@ function openFeedback(beta){
     $('fbTitle').textContent = '의견을 들려주세요 💬';
     $('fbSub').textContent = '말로는 지금 베타 테스트 중이에요. 좋았던 점·불편한 점·만들고 싶은 기능 뭐든 적어 주세요!';
   }
-  const sub = $('btnSubscribe');
-  if(payOn && beta){
-    const won = (S.cfg.payPrice || 9900).toLocaleString();
-    sub.textContent = `💳 카카오페이로 구독하기 (월 ${won}원)`;
-    sub.classList.remove('hidden');
-  } else {
-    sub.classList.add('hidden');
-  }
+  const box = $('planBox');
+  if(payOn && beta){ renderPlans(); box.classList.remove('hidden'); }
+  else { box.classList.add('hidden'); }
   $('fbModal').classList.remove('hidden');
   setTimeout(()=>$('fbText').focus(), 50);
 }
-$('btnSubscribe').onclick = startSubscribe;
 $('btnFeedback').onclick = ()=> openFeedback(false);
 $('btnFbClose').onclick = ()=> $('fbModal').classList.add('hidden');
 $('btnFbSend').onclick = async ()=>{

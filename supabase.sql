@@ -49,17 +49,17 @@ begin
     return json_build_object('allowed', true, 'remaining', 999999);
   end if;
 
-  -- 구독자(유효 기간 내): 월 한도 (월 바뀌면 리셋)
+  -- 구독자(유효 기간 내): 본인 플랜 월 한도 (월 바뀌면 리셋)
   if p.subscribed and (p.sub_until is null or p.sub_until > now()) then
     if p.usage_month <> cur then
       update public.profiles set usage_month = cur, usage_count = 0 where id = uid;
       p.usage_count := 0;
     end if;
-    if p.usage_count >= monthly_limit then
+    if p.usage_count >= coalesce(p.monthly_limit, monthly_limit) then
       return json_build_object('allowed', false, 'reason', 'limit');
     end if;
     update public.profiles set usage_count = p.usage_count + 1 where id = uid;
-    return json_build_object('allowed', true, 'remaining', monthly_limit - p.usage_count - 1);
+    return json_build_object('allowed', true, 'remaining', coalesce(p.monthly_limit, monthly_limit) - p.usage_count - 1);
   end if;
 
   -- 베타 무료 체험: 평생 trial_minutes(=무료 생성 횟수)회, 월 리셋 없음
@@ -86,17 +86,24 @@ alter table public.feedback enable row level security;
 -- ============================================
 -- 결제(포트원 정기결제) 지원
 -- ============================================
-alter table public.profiles add column if not exists billing_key text;   -- 카카오페이 빌링키(자동결제용)
-alter table public.profiles add column if not exists sub_until timestamptz; -- 구독 만료 시각
+alter table public.profiles add column if not exists billing_key text;     -- 카카오페이 빌링키(자동결제용)
+alter table public.profiles add column if not exists sub_until timestamptz;  -- 구독 만료 시각
+alter table public.profiles add column if not exists plan text;              -- 플랜 id (light/standard/pro)
+alter table public.profiles add column if not exists plan_price int;         -- 월 결제 금액(원)
+alter table public.profiles add column if not exists monthly_limit int;      -- 플랜별 월 생성 한도
 
--- 구독 활성화/연장 (결제 성공 시 호출)
-create or replace function public.activate_subscription(uid uuid, p_billing_key text, p_days int)
+-- 구독 활성화/연장 (결제 성공 시 호출) — 플랜·가격·월 한도 저장
+drop function if exists public.activate_subscription(uuid, text, int);
+create or replace function public.activate_subscription(uid uuid, p_billing_key text, p_days int, p_price int, p_limit int, p_plan text)
 returns void language plpgsql security definer set search_path = public as $$
 begin
   insert into public.profiles (id) values (uid) on conflict (id) do nothing;
   update public.profiles set
     subscribed = true,
     billing_key = coalesce(p_billing_key, billing_key),
+    plan = coalesce(p_plan, plan),
+    plan_price = coalesce(p_price, plan_price),
+    monthly_limit = coalesce(p_limit, monthly_limit),
     sub_until = greatest(coalesce(sub_until, now()), now()) + make_interval(days => p_days),
     usage_month = to_char(now(), 'YYYY-MM'),
     usage_count = 0
@@ -111,10 +118,11 @@ begin
 end $$;
 
 -- 결제일 도래 구독자 목록 (자동결제 크론용)
+drop function if exists public.due_subscriptions(int);
 create or replace function public.due_subscriptions(grace int)
-returns table(id uuid, email text, billing_key text)
+returns table(id uuid, email text, billing_key text, plan_price int, plan text, monthly_limit int)
 language sql security definer set search_path = public as $$
-  select id, email, billing_key from public.profiles
+  select id, email, billing_key, plan_price, plan, monthly_limit from public.profiles
   where subscribed = true and billing_key is not null
     and sub_until is not null and sub_until <= now() + make_interval(days => grace);
 $$;
