@@ -102,6 +102,38 @@
   .toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(80px);background:#191f28;color:#fff;font-size:14px;font-weight:600;padding:13px 22px;border-radius:99px;z-index:200;opacity:0;transition:.3s}
   .toast.show{transform:translateX(-50%) translateY(0);opacity:1}
   .hidden{display:none !important}
+
+  /* ===== 모바일 탭 전환 바 ===== */
+  .mtabs{display:none}
+
+  /* ===== 모바일 반응형 ===== */
+  @media (max-width:768px){
+    header{padding:0 14px;gap:10px}
+    .tagline{display:none}
+    .logo{font-size:20px}
+    .trial-badge{font-size:11.5px;padding:6px 9px;white-space:nowrap}
+    .hbtn{padding:7px 9px;font-size:13px;white-space:nowrap}
+    .hbtn.primary{padding:7px 11px}
+
+    .mtabs{display:flex;height:46px;background:var(--card);border-bottom:1px solid var(--line);flex-shrink:0}
+    .mtab{flex:1;font-size:14.5px;font-weight:700;color:var(--sub);border-bottom:2px solid transparent;display:flex;align-items:center;justify-content:center;gap:6px}
+    .mtab.active{color:var(--blue);border-bottom-color:var(--blue)}
+
+    .main{flex-direction:column;height:calc(100% - 60px - 46px)}
+    .left{width:100%;min-width:0;border-right:none;height:100%}
+    .right{height:100%}
+    .main:not(.preview) .right{display:none}
+    .main.preview .left{display:none}
+
+    .welcome{padding:22px 18px 4px}
+    .welcome h2{font-size:19px}
+    .welcome p{font-size:13.5px}
+    .chips{padding:12px 18px}
+
+    .preview-title{display:none}
+    .preview-head{padding:0 12px;gap:8px}
+    .pbtn{padding:7px 10px;font-size:12.5px;white-space:nowrap}
+  }
 </style>
 </head>
 <body>
@@ -115,7 +147,12 @@
   <button class="hbtn hidden" id="btnLogout">로그아웃</button>
 </header>
 
-<div class="main">
+<div class="mtabs" id="mtabs">
+  <button class="mtab active" data-pane="make">✏️ 만들기</button>
+  <button class="mtab" data-pane="preview">👁️ 미리보기</button>
+</div>
+
+<div class="main" id="mainEl">
   <div class="left">
     <div class="welcome" id="welcome">
       <h2>어떤 걸 만들어 드릴까요? 🛠️</h2>
@@ -206,6 +243,14 @@ import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 /* ================== 상태 ================== */
 const S = { supabase:null, session:null, code:'', codeHistory:false, busy:false, me:null };
 const $ = id => document.getElementById(id);
+
+/* ================== 모바일 탭 전환 ================== */
+const mq = window.matchMedia('(max-width:768px)');
+function setPane(p){
+  $('mainEl').classList.toggle('preview', p === 'preview');
+  document.querySelectorAll('.mtab').forEach(b => b.classList.toggle('active', b.dataset.pane === p));
+}
+document.querySelectorAll('.mtab').forEach(b => b.onclick = ()=> setPane(b.dataset.pane));
 
 /* ================== UI 유틸 ================== */
 function toast(msg){
@@ -312,6 +357,7 @@ async function generate(req){
   $('welcome').classList.add('hidden');
   $('chips').classList.add('hidden');
   addMsg('user', req);
+  if(mq.matches) setPane('preview');   // 모바일: 만들어지는 화면으로 전환
   const botMsg = addMsg('bot', '', 'working');
   botMsg.innerHTML = '<span class="stepText">' + WORKING_STEPS[0] + '</span><span class="dots"></span>';
   let stepIdx = 0;
@@ -423,6 +469,7 @@ $('btnNew').onclick = ()=>{
   $('empty').classList.remove('hidden');
   $('welcome').classList.remove('hidden');
   $('chips').classList.remove('hidden');
+  if(mq.matches) setPane('make');   // 모바일: 입력 화면으로 복귀
 };
 
 $('btnDownload').onclick = ()=>{
