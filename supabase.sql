@@ -43,24 +43,31 @@ begin
   insert into public.profiles (id) values (uid) on conflict (id) do nothing;
   select * into p from public.profiles where id = uid for update;
 
-  -- 월 바뀌면 카운트 리셋
-  if p.usage_month <> cur then
-    update public.profiles set usage_month = cur, usage_count = 0 where id = uid;
-    p.usage_count := 0;
+  -- 마스터(무제한)
+  if p.unlimited then
+    update public.profiles set usage_count = p.usage_count + 1 where id = uid;
+    return json_build_object('allowed', true, 'remaining', 999999);
   end if;
 
-  -- 구독 안 했고 체험 기간 지남
-  if (not p.subscribed) and now() > p.created_at + make_interval(mins => trial_minutes) then
+  -- 구독자(유효 기간 내): 월 한도 (월 바뀌면 리셋)
+  if p.subscribed and (p.sub_until is null or p.sub_until > now()) then
+    if p.usage_month <> cur then
+      update public.profiles set usage_month = cur, usage_count = 0 where id = uid;
+      p.usage_count := 0;
+    end if;
+    if p.usage_count >= monthly_limit then
+      return json_build_object('allowed', false, 'reason', 'limit');
+    end if;
+    update public.profiles set usage_count = p.usage_count + 1 where id = uid;
+    return json_build_object('allowed', true, 'remaining', monthly_limit - p.usage_count - 1);
+  end if;
+
+  -- 베타 무료 체험: 평생 trial_minutes(=무료 생성 횟수)회, 월 리셋 없음
+  if p.usage_count >= trial_minutes then
     return json_build_object('allowed', false, 'reason', 'trial_over');
   end if;
-
-  -- 월간 한도 초과
-  if p.usage_count >= monthly_limit then
-    return json_build_object('allowed', false, 'reason', 'limit');
-  end if;
-
   update public.profiles set usage_count = p.usage_count + 1 where id = uid;
-  return json_build_object('allowed', true, 'remaining', monthly_limit - p.usage_count - 1);
+  return json_build_object('allowed', true, 'remaining', trial_minutes - p.usage_count - 1);
 end $$;
 
 -- 사용자 피드백/후기
@@ -75,3 +82,39 @@ create table if not exists public.feedback (
 
 alter table public.feedback enable row level security;
 -- 공개 정책 없음: API(service_role)만 기록·조회. 피드백 열람은 Supabase 대시보드 Table Editor에서.
+
+-- ============================================
+-- 결제(포트원 정기결제) 지원
+-- ============================================
+alter table public.profiles add column if not exists billing_key text;   -- 카카오페이 빌링키(자동결제용)
+alter table public.profiles add column if not exists sub_until timestamptz; -- 구독 만료 시각
+
+-- 구독 활성화/연장 (결제 성공 시 호출)
+create or replace function public.activate_subscription(uid uuid, p_billing_key text, p_days int)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  insert into public.profiles (id) values (uid) on conflict (id) do nothing;
+  update public.profiles set
+    subscribed = true,
+    billing_key = coalesce(p_billing_key, billing_key),
+    sub_until = greatest(coalesce(sub_until, now()), now()) + make_interval(days => p_days),
+    usage_month = to_char(now(), 'YYYY-MM'),
+    usage_count = 0
+  where id = uid;
+end $$;
+
+-- 구독 해지 (결제 실패/취소 시)
+create or replace function public.cancel_subscription(uid uuid)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  update public.profiles set subscribed = false, billing_key = null where id = uid;
+end $$;
+
+-- 결제일 도래 구독자 목록 (자동결제 크론용)
+create or replace function public.due_subscriptions(grace int)
+returns table(id uuid, email text, billing_key text)
+language sql security definer set search_path = public as $$
+  select id, email, billing_key from public.profiles
+  where subscribed = true and billing_key is not null
+    and sub_until is not null and sub_until <= now() + make_interval(days => grace);
+$$;

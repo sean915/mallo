@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>말로 — 한국말로 만드는 앱</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<script src="https://cdn.portone.io/v2/browser-sdk.js"></script>
 <style>
   :root{
     --bg:#f2f4f6; --card:#ffffff; --ink:#191f28; --sub:#6b7684; --line:#e5e8eb;
@@ -230,6 +231,7 @@
       <span class="star" data-v="5" style="cursor:pointer;color:#d6dce3">★</span>
     </div>
     <textarea id="fbText" rows="4" placeholder="자유롭게 후기를 남겨 주세요 (예: 어떤 앱을 만들고 싶었는지, 아쉬운 점)" style="width:100%;border:2px solid var(--line);border-radius:12px;padding:12px 14px;font-size:15px;font-family:inherit;line-height:1.5;resize:none;outline:none;box-sizing:border-box"></textarea>
+    <button class="bigbtn hidden" id="btnSubscribe" style="background:#FEE500;color:#191600;font-weight:800">💳 카카오페이로 구독하기</button>
     <button class="bigbtn" id="btnFbSend">보내기</button>
     <button class="bigbtn gray" id="btnFbClose">닫기</button>
   </div>
@@ -303,12 +305,15 @@ function loadGA(id){
 }
 async function initAuth(){
   const cfg = await (await fetch('/api/config')).json();
+  S.cfg = cfg;
   loadGA(cfg.gaId);
   S.supabase = createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
   const { data:{ session } } = await S.supabase.auth.getSession();
   setSession(session);
+  handlePayReturn();   // 모바일 결제 리다이렉트 복귀 처리
   S.supabase.auth.onAuthStateChange((_e, sess)=> setSession(sess));
 }
+const payConfigured = ()=> !!(S.cfg && S.cfg.payStoreId && S.cfg.payChannelKey);
 function setSession(session){
   S.session = session;
   const loggedIn = !!session;
@@ -348,6 +353,50 @@ $('btnKakao').onclick = ()=> S.supabase.auth.signInWithOAuth({
   options:{ redirectTo: location.origin }
 });
 $('btnLogout').onclick = async ()=>{ await S.supabase.auth.signOut(); location.reload(); };
+
+/* ================== 결제(포트원 · 카카오페이 정기결제) ================== */
+async function startSubscribe(){
+  if(!payConfigured()){ toast('결제 준비 중이에요'); return; }
+  if(!S.session){ toast('로그인이 필요해요'); return; }
+  if(!window.PortOne){ toast('결제 모듈을 불러오는 중이에요. 잠시 후 다시 눌러주세요'); return; }
+  const btn = $('btnSubscribe'); btn.disabled = true;
+  try{
+    const rsp = await PortOne.requestIssueBillingKey({
+      storeId: S.cfg.payStoreId,
+      channelKey: S.cfg.payChannelKey,
+      billingKeyMethod: 'EASY_PAY',
+      issueId: `mallo-${Date.now()}`,
+      issueName: S.cfg.payName || '말로 월 구독',
+      customer: { customerId: S.session.user.id, email: S.session.user.email },
+      redirectUrl: location.origin + '/?pay=return',   // 모바일에서 카카오페이 후 복귀
+    });
+    if(!rsp || rsp.code != null){ toast('결제가 취소됐어요'); return; }   // 데스크톱(팝업) 경로
+    await activateWithBillingKey(rsp.billingKey);
+  }catch(e){ toast('결제 중 문제가 생겼어요. 잠시 후 다시 시도해 주세요'); }
+  finally{ btn.disabled = false; }
+}
+async function activateWithBillingKey(billingKey){
+  if(!billingKey || !S.session) return;
+  const res = await fetch('/api/subscribe', {
+    method:'POST',
+    headers:{ 'content-type':'application/json', authorization:`Bearer ${S.session.access_token}` },
+    body: JSON.stringify({ billingKey })
+  });
+  if(!res.ok){ toast('결제에 실패했어요. 카카오페이 한도를 확인해 주세요'); return; }
+  track('subscribe');
+  $('fbModal').classList.add('hidden');
+  await refreshMe();
+  toast('구독 완료! 이제 계속 만들 수 있어요 🎉');
+}
+// 모바일: 카카오페이 결제 후 redirectUrl 로 돌아왔을 때 처리
+function handlePayReturn(){
+  const q = new URLSearchParams(location.search);
+  if(q.get('pay') !== 'return') return;
+  const bk = q.get('billingKey');
+  history.replaceState({}, '', location.origin + location.pathname);
+  if(bk && S.session){ activateWithBillingKey(bk); }
+  else if(q.get('code')){ toast('결제가 취소됐어요'); }
+}
 
 /* ================== 생성 플로우 ================== */
 async function generate(req){
@@ -492,16 +541,31 @@ document.querySelectorAll('#fbStars .star').forEach(s=>{
   s.onclick = ()=>{ S.fbRating = Number(s.dataset.v); updateStars(); };
 });
 function openFeedback(beta){
+  const payOn = payConfigured();
   if(beta){
-    $('fbTitle').textContent = '무료 체험 3회가 끝났어요 🧪';
-    $('fbSub').textContent = '말로는 아직 베타 테스트 버전이에요. 지금은 결제 없이 준비 중이고, 정식 오픈하면 알려드릴게요. 써보신 후기를 남겨 주시면 큰 힘이 됩니다!';
+    if(payOn){
+      $('fbTitle').textContent = '무료 3회를 다 쓰셨어요 🎉';
+      $('fbSub').textContent = '구독하면 계속 만들 수 있어요. 카카오페이로 지문 한 번이면 바로 시작돼요.';
+    } else {
+      $('fbTitle').textContent = '무료 체험 3회가 끝났어요 🧪';
+      $('fbSub').textContent = '말로는 아직 베타 테스트 버전이에요. 지금은 결제 없이 준비 중이고, 정식 오픈하면 알려드릴게요. 써보신 후기를 남겨 주시면 큰 힘이 됩니다!';
+    }
   } else {
     $('fbTitle').textContent = '의견을 들려주세요 💬';
     $('fbSub').textContent = '말로는 지금 베타 테스트 중이에요. 좋았던 점·불편한 점·만들고 싶은 기능 뭐든 적어 주세요!';
   }
+  const sub = $('btnSubscribe');
+  if(payOn && beta){
+    const won = (S.cfg.payPrice || 9900).toLocaleString();
+    sub.textContent = `💳 카카오페이로 구독하기 (월 ${won}원)`;
+    sub.classList.remove('hidden');
+  } else {
+    sub.classList.add('hidden');
+  }
   $('fbModal').classList.remove('hidden');
   setTimeout(()=>$('fbText').focus(), 50);
 }
+$('btnSubscribe').onclick = startSubscribe;
 $('btnFeedback').onclick = ()=> openFeedback(false);
 $('btnFbClose').onclick = ()=> $('fbModal').classList.add('hidden');
 $('btnFbSend').onclick = async ()=>{
