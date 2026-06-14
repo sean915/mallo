@@ -39,14 +39,14 @@ export default async function handler(req) {
     body: JSON.stringify({
       uid: user.id,
       monthly_limit: Number(env('MONTHLY_LIMIT', '100')),
-      trial_minutes: Number(env('TRIAL_MINUTES', '30')),
+      trial_minutes: Number(env('TRIAL_LIMIT', '3')), // 이제 '분'이 아니라 무료 체험 '횟수'
     }),
   });
   if (!rpc.ok) return json({ error: '서버 오류가 났어요. 잠시 후 다시 시도해 주세요.' }, 500);
   const quota = await rpc.json();
   if (!quota.allowed) {
     const msg = quota.reason === 'trial_over'
-      ? '30분 무료 체험이 끝났어요. 구독하면 계속 만들 수 있어요!'
+      ? '무료 체험 3회를 모두 썼어요. 베타 기간이라 지금은 여기까지예요 🙏 후기를 남겨 주시면 큰 힘이 됩니다!'
       : '이번 달 만들기 횟수를 모두 썼어요. 다음 달 1일에 다시 충전돼요.';
     return json({ error: msg, code: quota.reason }, 402);
   }

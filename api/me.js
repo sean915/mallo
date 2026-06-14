@@ -3,7 +3,7 @@ import { json, env, getUser } from './_lib.js';
 
 export const config = { runtime: 'edge' };
 
-const TRIAL_MINUTES = 30;
+const TRIAL_LIMIT = 3; // 베타 무료 체험: 평생 생성 가능 횟수
 // 마스터(무제한) 계정 — 이메일 기준으로도 보장
 const MASTER_EMAILS = ['seanhh915@gmail.com'];
 
@@ -29,12 +29,10 @@ export default async function handler(req) {
       p = { created_at: new Date().toISOString(), subscribed: false, unlimited: false, usage_month: '', usage_count: 0 };
     }
 
-    const trialMinutes = Number(env('TRIAL_MINUTES', String(TRIAL_MINUTES)));
-    const elapsedMin = (Date.now() - new Date(p.created_at).getTime()) / 60000;
-    const trialLeft = Math.max(0, Math.ceil(trialMinutes - elapsedMin)); // 남은 '분'
+    const trialLimit = Number(env('TRIAL_LIMIT', String(TRIAL_LIMIT)));
     const limit = Number(env('MONTHLY_LIMIT', '100'));
-    const curMonth = new Date().toISOString().slice(0, 7);
-    const used = p.usage_month === curMonth ? p.usage_count : 0;
+    const used = Number(p.usage_count || 0);          // 평생 사용 횟수(무료 체험 기준)
+    const trialLeft = Math.max(0, trialLimit - used); // 남은 '횟수'
 
     return json({
       email: user.email,
