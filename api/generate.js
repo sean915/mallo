@@ -26,6 +26,21 @@ const SYSTEM_PROMPT = `당신은 한국어 요구사항을 받아 "실무에서 
 11. 요구사항이 모호하면 되묻지 말고, 가장 상식적이고 완성도 높은 형태로 스스로 결정해 완성할 것.
 12. 기존 코드가 주어지면 요청된 수정만 반영한 전체 코드를 다시 출력할 것.`;
 
+// 자동 모델 선택: 사용자는 모델을 고르지 않음. 요청 난이도를 보고 Sonnet/Opus 자동 결정.
+//  - 기본은 Sonnet(저렴·빠름)
+//  - 복잡/고난도 도메인, 긴 요청, 또는 사용자가 결과에 불만이라 다시 요청 → Opus로 승급
+// 환경변수로 끄기: AUTO_MODEL=0 (그러면 LLM_MODEL 사용). 모델명은 LLM_MODEL_SIMPLE / LLM_MODEL_COMPLEX 로 변경 가능.
+function pickClaudeModel(prompt, hasCode) {
+  const sonnet = env('LLM_MODEL_SIMPLE', 'claude-sonnet-4-6');
+  const opus = env('LLM_MODEL_COMPLEX', 'claude-opus-4-8');
+  if (env('AUTO_MODEL', '1') === '0') return env('LLM_MODEL', opus);
+  const p = String(prompt || '');
+  const redo = hasCode && /(다시|처음부터|완전|별로|이상|마음에\s*안|안\s*돼|안\s*나|엉망|왜\s*이래|제대로|구려|별룬)/.test(p);
+  const complex = /(게임|쇼핑몰|결제|장바구니|주문|대시보드|관리자|예약|캘린더|일정관리|차트|그래프|통계|실시간|드래그|애니메이션|지도|채팅|메신저|멀티|시뮬|에디터|캔버스|물리|점수|랭킹|로그인|데이터베이스|크롤|api)/i.test(p);
+  const longReq = p.length > 180;
+  return (redo || complex || longReq) ? opus : sonnet;
+}
+
 export default async function handler(req) {
   if (req.method !== 'POST') return json({ error: '허용되지 않은 요청이에요' }, 405);
 
@@ -65,9 +80,10 @@ export default async function handler(req) {
   // 4. LLM 호출 (서버 환경변수의 키 사용 — 클라이언트는 모름)
   const provider = env('LLM_PROVIDER', 'gemini');
   const key = env('LLM_API_KEY');
-  let upstream, extract;
+  let upstream, extract, usedModel = '';
 
   if (provider === 'claude') {
+    usedModel = pickClaudeModel(prompt, !!code); // 난이도 보고 Sonnet/Opus 자동 선택
     upstream = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -76,7 +92,7 @@ export default async function handler(req) {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: env('LLM_MODEL', 'claude-sonnet-4-6'),
+        model: usedModel,
         max_tokens: 24000,
         stream: true,
         system: SYSTEM_PROMPT,
@@ -163,6 +179,7 @@ export default async function handler(req) {
       'content-type': 'text/event-stream; charset=utf-8',
       'cache-control': 'no-cache',
       'x-remaining': String(quota.remaining ?? ''),
+      'x-model': usedModel, // 어떤 모델이 처리했는지(디버그용)
     },
   });
 }
