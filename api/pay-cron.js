@@ -19,9 +19,6 @@ export default async function handler(req) {
   let secret;
   try { secret = env('PORTONE_API_SECRET'); } catch { return json({ ok: true, skipped: 'no_payment_keys' }); }
 
-  const price = Number(env('PAY_PRICE', '9900'));
-  const orderName = env('PAY_NAME', '말로 월 구독');
-
   // 오늘 결제일이 도래한(또는 지난) 구독자 목록 — SECURITY DEFINER RPC
   const res = await sb('rpc/due_subscriptions', {
     method: 'POST',
@@ -33,13 +30,14 @@ export default async function handler(req) {
 
   let charged = 0, failed = 0;
   for (const row of due) {
+    const price = Number(row.plan_price || 9900);
     const paymentId = `mallo-${row.id}-${Date.now()}`;
     const pay = await fetch(`https://api.portone.io/payments/${encodeURIComponent(paymentId)}/billing-key`, {
       method: 'POST',
       headers: { authorization: `PortOne ${secret}`, 'content-type': 'application/json' },
       body: JSON.stringify({
         billingKey: row.billing_key,
-        orderName,
+        orderName: `말로 ${row.plan || ''} 구독`.trim(),
         customer: { id: row.id, email: row.email },
         amount: { total: price },
         currency: 'KRW',
@@ -48,7 +46,7 @@ export default async function handler(req) {
     if (pay.ok) {
       await sb('rpc/activate_subscription', {
         method: 'POST',
-        body: JSON.stringify({ uid: row.id, p_billing_key: row.billing_key, p_days: 30 }),
+        body: JSON.stringify({ uid: row.id, p_billing_key: row.billing_key, p_days: 30, p_price: price, p_limit: row.monthly_limit, p_plan: row.plan }),
       });
       charged++;
     } else {

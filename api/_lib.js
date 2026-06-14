@@ -1,5 +1,12 @@
 // 공용 유틸 (Vercel Edge Functions)
 
+// 구독 플랜 (단일 출처) — 가격(원)/월 생성(만들기·수정) 횟수
+export const PLANS = {
+  light:    { name: '라이트',   price: 9900,  limit: 10 },
+  standard: { name: '스탠다드', price: 24900, limit: 25 },
+  pro:      { name: '프로',     price: 49000, limit: 50 },
+};
+
 export function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), {
     status,
