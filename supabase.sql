@@ -118,3 +118,22 @@ language sql security definer set search_path = public as $$
   where subscribed = true and billing_key is not null
     and sub_until is not null and sub_until <= now() + make_interval(days => grace);
 $$;
+
+-- ============================================
+-- 내 도구함 (사용자가 만든 도구 + 입력 데이터 저장)
+-- ============================================
+create table if not exists public.tools (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  title text not null default '내 도구',
+  html text not null,
+  data jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+alter table public.tools enable row level security;
+drop policy if exists "own tools" on public.tools;
+create policy "own tools" on public.tools for all to authenticated
+  using (auth.uid() = user_id) with check (auth.uid() = user_id);
+grant all on public.tools to authenticated;
+create index if not exists tools_user_idx on public.tools(user_id, updated_at desc);
