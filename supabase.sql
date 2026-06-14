@@ -145,3 +145,10 @@ create policy "own tools" on public.tools for all to authenticated
   using (auth.uid() = user_id) with check (auth.uid() = user_id);
 grant all on public.tools to authenticated;
 create index if not exists tools_user_idx on public.tools(user_id, updated_at desc);
+
+-- 공유 링크: shared=true 이면 누구나(비로그인 포함) 읽기 가능
+alter table public.tools add column if not exists shared boolean not null default false;
+drop policy if exists "shared tools read" on public.tools;
+create policy "shared tools read" on public.tools for select to anon, authenticated
+  using (shared = true);
+grant select on public.tools to anon;

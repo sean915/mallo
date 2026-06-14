@@ -66,7 +66,21 @@
   .ti-name{font-size:14.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .ti-date{font-size:12px;color:var(--sub);margin-top:2px}
   .ti-open{font-size:13px;font-weight:700;color:var(--blue);padding:7px 12px;border-radius:9px;background:var(--blue-bg)}
+  .ti-app,.ti-share{font-size:15px;padding:7px 8px;border-radius:9px}
+  .ti-app:hover,.ti-share:hover{background:var(--bg)}
   .ti-del{font-size:12px;color:var(--sub);padding:7px 8px}
+
+  /* 도구 단독 뷰어(공유 링크·설치형 앱) */
+  .viewer{position:fixed;inset:0;z-index:300;background:#fff;display:none;flex-direction:column}
+  .viewer.on{display:flex}
+  .vbar{height:50px;flex-shrink:0;display:flex;align-items:center;gap:8px;padding:0 12px;border-bottom:1px solid var(--line);background:var(--card)}
+  .vbar .vlogo{font-size:16px;font-weight:800}
+  .vbar .vlogo b{color:var(--blue)}
+  .vbar .vtitle{flex:1;font-size:14px;font-weight:700;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .vbtn{font-size:13px;font-weight:700;padding:8px 12px;border-radius:10px;white-space:nowrap}
+  .vbtn.prim{background:var(--blue);color:#fff}
+  .vbtn.ghost{color:var(--sub);background:var(--bg)}
+  .viewer iframe{flex:1;width:100%;border:none;background:#fff}
 
   .inputbar{padding:14px 16px 18px;border-top:1px solid var(--line)}
   .inputbox{display:flex;align-items:flex-end;gap:8px;background:var(--bg);border-radius:var(--radius);padding:10px 10px 10px 16px;border:2px solid transparent;transition:.15s}
@@ -280,6 +294,17 @@
   </div>
 </div>
 
+<!-- 도구 단독 뷰어 (공유 링크 / 설치형 앱으로 열릴 때) -->
+<div class="viewer" id="viewer">
+  <div class="vbar">
+    <div class="vlogo">말<b>로</b></div>
+    <div class="vtitle" id="vTitle">내 도구</div>
+    <button class="vbtn ghost hidden" id="vEdit">✏️ 편집</button>
+    <button class="vbtn prim" id="vInstall">📲 앱으로 설치</button>
+  </div>
+  <iframe id="vframe" sandbox="allow-scripts allow-modals allow-forms allow-popups"></iframe>
+</div>
+
 <!-- 내 도구함 -->
 <div class="overlay hidden" id="toolsModal">
   <div class="modal">
@@ -364,7 +389,11 @@ function renderPreview(html, force=false){
 // 미리보기에서 사용자가 입력한 데이터를 받아 자동 저장
 window.addEventListener('message', (e)=>{
   const d = e.data;
-  if(d && d.__mallo === 'data' && d.data){ S.toolData = d.data; scheduleSaveData(); }
+  if(!(d && d.__mallo === 'data' && d.data)) return;
+  S.toolData = d.data;
+  // 공유 링크로 연 다른 사람: 내 기기 로컬에만 저장(소유자 데이터는 안 건드림)
+  if(S.viewerId && !S.viewerOwner){ try{ localStorage.setItem('mallo_tool_' + S.viewerId, JSON.stringify(d.data)); }catch(e){} return; }
+  scheduleSaveData();   // 소유자/빌더: 클라우드 자동 저장
 });
 let _saveTimer = null;
 function scheduleSaveData(){ clearTimeout(_saveTimer); _saveTimer = setTimeout(persistData, 1200); }
@@ -408,9 +437,11 @@ async function openMyTools(){
       const ds = dt.getFullYear()+'.'+String(dt.getMonth()+1).padStart(2,'0')+'.'+String(dt.getDate()).padStart(2,'0');
       const row = document.createElement('div');
       row.className = 'tool-item';
-      row.innerHTML = '<div class="ti-main"><div class="ti-name"></div><div class="ti-date">'+ds+' 수정</div></div><button class="ti-open">열기</button><button class="ti-del">삭제</button>';
+      row.innerHTML = '<div class="ti-main"><div class="ti-name"></div><div class="ti-date">'+ds+' 수정</div></div><button class="ti-open">열기</button><button class="ti-app" title="앱으로 열기·설치">📲</button><button class="ti-share" title="공유 링크 복사">🔗</button><button class="ti-del">삭제</button>';
       row.querySelector('.ti-name').textContent = t.title || '내 도구';
       row.querySelector('.ti-open').onclick = ()=> loadTool(t.id);
+      row.querySelector('.ti-app').onclick = ()=> { location.href = location.origin + '/?t=' + t.id; };
+      row.querySelector('.ti-share').onclick = ()=> shareTool(t.id);
       row.querySelector('.ti-del').onclick = ()=> delTool(t.id, row);
       list.appendChild(row);
     });
@@ -452,9 +483,54 @@ async function initAuth(){
   loadGA(cfg.gaId);
   S.supabase = createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
   const { data:{ session } } = await S.supabase.auth.getSession();
+  const tid = new URLSearchParams(location.search).get('t');
+  if(tid){ S.session = session; enterViewer(tid); return; }   // 도구 단독 뷰어(공유/설치형 앱)
   setSession(session);
   handlePayReturn();   // 모바일 결제 리다이렉트 복귀 처리
   S.supabase.auth.onAuthStateChange((_e, sess)=> setSession(sess));
+}
+
+/* ================== 도구 뷰어 + 설치형 앱(PWA) + 공유 ================== */
+let _deferredInstall = null;
+window.addEventListener('beforeinstallprompt', (e)=>{ e.preventDefault(); _deferredInstall = e; });
+function registerSW(){ if('serviceWorker' in navigator){ navigator.serviceWorker.register('/sw.js').catch(()=>{}); } }
+async function enterViewer(tid){
+  registerSW();
+  let data = null;
+  try{ const r = await S.supabase.from('tools').select('*').eq('id', tid).single(); data = r.data; }catch(e){}
+  if(!data){
+    document.body.innerHTML = '<div style="font-family:Pretendard;display:flex;height:100vh;align-items:center;justify-content:center;text-align:center;color:#6b7684;padding:24px">도구를 찾을 수 없어요.<br>링크가 만료됐거나 비공개 도구일 수 있어요.</div>';
+    return;
+  }
+  const isOwner = !!(S.session && S.session.user && S.session.user.id === data.user_id);
+  S.viewerId = tid; S.viewerOwner = isOwner;
+  if(isOwner) S.currentToolId = tid;   // 소유자: 입력 데이터 클라우드 자동저장
+  // 설치용 매니페스트 주입
+  const ml = document.createElement('link'); ml.rel = 'manifest';
+  ml.href = '/api/manifest?t=' + encodeURIComponent(tid) + '&name=' + encodeURIComponent(data.title || '내 도구');
+  document.head.appendChild(ml);
+  document.title = (data.title || '내 도구') + ' · 말로';
+  // 데이터 seed: 소유자=클라우드, 그 외=내 기기 로컬
+  let seed = data.data || {};
+  if(!isOwner){ try{ const loc = localStorage.getItem('mallo_tool_' + tid); if(loc) seed = JSON.parse(loc); }catch(e){} }
+  S.toolData = seed;
+  $('vTitle').textContent = data.title || '내 도구';
+  $('vEdit').classList.toggle('hidden', !isOwner);
+  $('vframe').srcdoc = withShim(data.html, seed);
+  $('viewer').classList.add('on');
+}
+function bindViewerButtons(){
+  $('vEdit').onclick = ()=>{ location.href = location.origin + '/'; };
+  $('vInstall').onclick = async ()=>{
+    if(_deferredInstall){ _deferredInstall.prompt(); try{ await _deferredInstall.userChoice; }catch(e){} _deferredInstall = null; }
+    else { toast('설치 안내: (휴대폰) 브라우저 메뉴 → "홈 화면에 추가" · (PC) 주소창 오른쪽 설치 아이콘'); }
+  };
+}
+async function shareTool(id){
+  try{ await S.supabase.from('tools').update({ shared: true }).eq('id', id); }catch(e){}
+  const link = location.origin + '/?t=' + id;
+  try{ await navigator.clipboard.writeText(link); toast('공유 링크를 복사했어요! 붙여넣어 보내세요 🔗'); }
+  catch(e){ prompt('이 링크를 복사해 공유하세요:', link); }
 }
 const payConfigured = ()=> !!(S.cfg && S.cfg.payStoreId && S.cfg.payChannelKey);
 function setSession(session){
@@ -759,6 +835,7 @@ $('btnFbSend').onclick = async ()=>{
 };
 
 /* ================== 시작 ================== */
+bindViewerButtons();
 initAuth();
 </script>
 </body>
