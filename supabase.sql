@@ -152,3 +152,16 @@ drop policy if exists "shared tools read" on public.tools;
 create policy "shared tools read" on public.tools for select to anon, authenticated
   using (shared = true);
 grant select on public.tools to anon;
+
+-- ============================================
+-- 회원 탈퇴: 본인 계정·데이터 영구 삭제
+-- auth.users 행 삭제 → profiles/tools(on delete cascade), feedback(set null) 연쇄 처리
+-- auth.uid() 기준이라 본인 계정만 삭제됨(타인 삭제 불가)
+-- ============================================
+create or replace function public.delete_account()
+returns void language plpgsql security definer set search_path = public, auth as $$
+begin
+  delete from auth.users where id = auth.uid();
+end $$;
+revoke all on function public.delete_account() from public, anon;
+grant execute on function public.delete_account() to authenticated;

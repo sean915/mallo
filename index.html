@@ -275,6 +275,7 @@
     </button>
     <p class="sub" style="text-align:center;margin-top:14px">🧪 베타 테스트 중 · 가입 즉시 3회 무료 체험</p>
     <p class="sub" style="text-align:center;margin-top:6px;font-size:12.5px;color:#8b95a1">카카오톡 안에서 열었다면 구글 로그인이 막힐 수 있어요. 그땐 카카오로 시작하거나, 메뉴 → 다른 브라우저로 열기를 눌러주세요.</p>
+    <p class="sub" style="text-align:center;margin-top:10px;font-size:12px;color:#8b95a1">로그인 시 <a href="/privacy.html" target="_blank" style="color:#6b7684">개인정보처리방침</a>에 동의하게 됩니다.</p>
   </div>
 </div>
 
@@ -316,6 +317,7 @@
     <p class="sub">만든 도구가 자동 저장돼요. 다시 열어서 이어 쓰면 입력한 내용도 그대로 남아 있어요.</p>
     <div class="tool-list" id="toolList"></div>
     <button class="bigbtn gray" id="btnToolsClose">닫기</button>
+    <p style="text-align:center;margin-top:14px"><a href="#" id="btnDeleteAcct" style="font-size:12.5px;color:#8b95a1;text-decoration:underline">회원 탈퇴 (계정·데이터 영구 삭제)</a></p>
   </div>
 </div>
 
@@ -778,6 +780,19 @@ $('btnNew').onclick = ()=>{
 
 $('btnMyTools').onclick = openMyTools;
 $('btnToolsClose').onclick = ()=> $('toolsModal').classList.add('hidden');
+$('btnDeleteAcct').onclick = async (e)=>{
+  e.preventDefault();
+  if(!S.session){ toast('로그인이 필요해요'); return; }
+  if(!confirm('정말 탈퇴할까요?\n내가 만든 도구와 입력한 데이터, 계정 정보가 모두 영구 삭제되며 되돌릴 수 없어요.')) return;
+  try{
+    const { error } = await S.supabase.rpc('delete_account');
+    if(error) throw error;
+    track('delete_account');
+    await S.supabase.auth.signOut();
+    toast('탈퇴가 완료됐어요. 그동안 감사했습니다 🙏');
+    setTimeout(()=> location.reload(), 1500);
+  }catch(err){ toast('탈퇴 처리에 실패했어요. 잠시 후 다시 시도해 주세요'); }
+};
 $('btnInstallApp').onclick = ()=>{
   if(!S.currentToolId){ toast('먼저 도구를 만들어 주세요'); return; }
   location.href = location.origin + '/?t=' + S.currentToolId;   // 앱 화면으로 → 거기서 설치
