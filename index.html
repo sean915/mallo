@@ -303,7 +303,8 @@
     <div class="vlogo">말<b>로</b></div>
     <div class="vtitle" id="vTitle">내 도구</div>
     <button class="vbtn ghost hidden" id="vEdit">✏️ 편집</button>
-    <button class="vbtn prim" id="vInstall">📲 앱으로 설치</button>
+    <button class="vbtn prim hidden" id="vMake">⚡ 나도 만들기</button>
+    <button class="vbtn ghost" id="vInstall">📲 앱으로 설치</button>
   </div>
   <iframe id="vframe" sandbox="allow-scripts allow-modals allow-forms allow-popups"></iframe>
 </div>
@@ -377,6 +378,13 @@ function withShim(html, seed){
   if(/<head[^>]*>/i.test(html)) return html.replace(/<head[^>]*>/i, m => m + shim);
   if(/<html[^>]*>/i.test(html)) return html.replace(/<html[^>]*>/i, m => m + shim);
   return shim + html;
+}
+// 생성물 우하단에 "말로로 만들었어요" 바이럴 배지(공유/설치/다운로드 시 노출 → 받는 사람 유입)
+function withBadge(html, origin){
+  const url = (origin || 'https://mallo-alpha.vercel.app') + '/';
+  const badge = '<a href="' + url + '" target="_blank" rel="noopener" style="position:fixed;right:12px;bottom:12px;z-index:2147483647;display:flex;align-items:center;gap:6px;background:#3182f6;color:#fff;font:700 12px/1 Pretendard,-apple-system,sans-serif;padding:9px 13px;border-radius:999px;text-decoration:none;box-shadow:0 4px 14px rgba(0,0,0,.18)">⚡ 말로로 만들었어요</a>';
+  if(/<\/body>/i.test(html)) return html.replace(/<\/body>/i, badge + '</body>');
+  return html + badge;
 }
 let lastRender = 0;
 function renderPreview(html, force=false){
@@ -522,11 +530,13 @@ async function enterViewer(tid){
   S.toolData = seed;
   $('vTitle').textContent = data.title || '내 도구';
   $('vEdit').classList.toggle('hidden', !isOwner);
-  $('vframe').srcdoc = withShim(data.html, seed);
+  $('vMake').classList.toggle('hidden', isOwner);   // 받은 사람에게 "나도 만들기" 유입 CTA
+  $('vframe').srcdoc = withBadge(withShim(data.html, seed), location.origin);
   $('viewer').classList.add('on');
 }
 function bindViewerButtons(){
   $('vEdit').onclick = ()=>{ location.href = location.origin + '/'; };
+  $('vMake').onclick = ()=>{ location.href = location.origin + '/'; };   // 나도 만들기 → 홈
   $('vInstall').onclick = async ()=>{
     if(_deferredInstall){ _deferredInstall.prompt(); try{ await _deferredInstall.userChoice; }catch(e){} _deferredInstall = null; }
     else { toast('설치 안내: (휴대폰) 브라우저 메뉴 → "홈 화면에 추가" · (PC) 주소창 오른쪽 설치 아이콘'); }
@@ -784,6 +794,7 @@ $('btnDownload').onclick = ()=>{
     if(/<head[^>]*>/i.test(html)) html = html.replace(/<head[^>]*>/i, m => m + inj);
     else html = inj + html;
   }catch(e){}
+  html = withBadge(html, location.origin);   // "말로로 만들었어요" 바이럴 배지
   const blob = new Blob([html], {type:'text/html'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
