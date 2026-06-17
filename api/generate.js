@@ -68,15 +68,22 @@ export default async function handler(req) {
       uid: user.id,
       monthly_limit: Number(env('MONTHLY_LIMIT', '100')),
       trial_minutes: Number(env('TRIAL_LIMIT', '3')), // 이제 '분'이 아니라 무료 체험 '횟수'
+      p_cooldown_sec: Number(env('COOLDOWN_SEC', '6')),   // 어뷰징: 계정당 연속 생성 최소 간격(초)
+      p_daily_cap: Number(env('DAILY_CAP', '500')),        // 어뷰징/비용: 전체 일일 생성 상한
     }),
   });
   if (!rpc.ok) return json({ error: '서버 오류가 났어요. 잠시 후 다시 시도해 주세요.' }, 500);
   const quota = await rpc.json();
   if (!quota.allowed) {
-    const msg = quota.reason === 'trial_over'
-      ? '무료 체험 3회를 모두 썼어요. 베타 기간이라 지금은 여기까지예요 🙏 후기를 남겨 주시면 큰 힘이 됩니다!'
-      : '이번 달 만들기 횟수를 모두 썼어요. 다음 달 1일에 다시 충전돼요.';
-    return json({ error: msg, code: quota.reason }, 402);
+    const MSG = {
+      trial_over: '무료 체험 3회를 모두 썼어요. 베타 기간이라 지금은 여기까지예요 🙏 후기를 남겨 주시면 큰 힘이 됩니다!',
+      limit: '이번 달 만들기 횟수를 모두 썼어요. 다음 달 1일에 다시 충전돼요.',
+      cooldown: '조금 빠르네요! 몇 초 뒤에 다시 시도해 주세요 🙂',
+      busy: '지금 접속이 많아 잠시 쉬어가는 중이에요. 잠시 후 다시 시도해 주세요 🙏',
+    };
+    const code = quota.reason || 'limit';
+    const status = (code === 'cooldown' || code === 'busy') ? 429 : 402;
+    return json({ error: MSG[code] || MSG.limit, code }, status);
   }
 
   // 3. 요청 검증
