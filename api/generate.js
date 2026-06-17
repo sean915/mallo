@@ -151,7 +151,7 @@ export default async function handler(req) {
     const errBody = await upstream.text().catch(() => '');
     console.error('[generate] primary failed → fallback', upstream.status, errBody.slice(0, 300));
     const fbProvider = env('LLM_FALLBACK_PROVIDER', 'gemini');
-    const fbModel = env('LLM_FALLBACK_MODEL', 'gemini-2.0-flash');
+    const fbModel = env('LLM_FALLBACK_MODEL', 'gemini-2.5-flash');
     const fbCall = buildCall(fbProvider, fbKey, fbModel);
     upstream = await fetch(fbCall.url, fbCall.options);
     extract = fbCall.extract;

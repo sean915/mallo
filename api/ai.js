@@ -27,7 +27,7 @@ export default async function handler(req) {
   if (!key) { try { key = env('LLM_API_KEY'); } catch {} }
   if (!key) return json({ error: 'AI 기능이 아직 준비 중이에요' }, 503);
 
-  const model = env('AI_MODEL', 'gemini-2.0-flash');
+  const model = env('AI_MODEL', 'gemini-2.5-flash');
 
   let res;
   try {
