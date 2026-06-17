@@ -106,7 +106,7 @@ export default async function handler(req) {
         options: {
           method: 'POST',
           headers: { 'content-type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-          body: JSON.stringify({ model: modelName, max_tokens: 24000, stream: true, system: SYSTEM_PROMPT, messages: [{ role: 'user', content: userPrompt }] }),
+          body: JSON.stringify({ model: modelName, max_tokens: Number(env('MAX_TOKENS', '16000')), stream: true, system: SYSTEM_PROMPT, messages: [{ role: 'user', content: userPrompt }] }),
         },
         extract: (j) => (j.type === 'content_block_delta' ? j.delta?.text : null),
       };
