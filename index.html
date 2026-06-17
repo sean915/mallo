@@ -376,6 +376,11 @@ function withShim(html, seed){
     + 'function mk(store,persist){return{getItem:function(k){k=String(k);return Object.prototype.hasOwnProperty.call(store,k)?store[k]:null;},setItem:function(k,v){store[String(k)]=String(v);if(persist)notify();},removeItem:function(k){delete store[String(k)];if(persist)notify();},clear:function(){Object.keys(store).forEach(function(k){delete store[k];});if(persist)notify();},key:function(i){return Object.keys(store)[i]||null;},get length(){return Object.keys(store).length;}};}'
     + 'Object.defineProperty(window,"localStorage",{value:mk(mem,true),configurable:true});'
     + 'Object.defineProperty(window,"sessionStorage",{value:mk(ses,false),configurable:true});'
+    // 내장 AI: 도구는 키를 모른 채 window.말로.ai("...") 만 호출 → 부모(말로)가 /api/ai로 중계
+    + 'var _aiq={},_aid=0;'
+    + 'function _ai(prompt){return new Promise(function(res,rej){var id=++_aid;_aiq[id]={res:res,rej:rej};try{P.postMessage({__mallo:"ai",id:id,prompt:String(prompt==null?"":prompt)},"*");}catch(e){rej(e);}setTimeout(function(){if(_aiq[id]){_aiq[id].rej(new Error("AI \\uc751\\ub2f5 \\uc2dc\\uac04 \\ucd08\\uacfc"));delete _aiq[id];}},60000);});}'
+    + 'window.addEventListener("message",function(e){var d=e.data;if(!d||d.__mallo!=="ai-result")return;var q=_aiq[d.id];if(!q)return;delete _aiq[d.id];if(d.error)q.rej(new Error(d.error));else q.res(d.text||"");});'
+    + 'var _A={ai:_ai};window["\\ub9d0\\ub85c"]=_A;window.mallo=_A;'
     + '}catch(e){}})();</scr'+'ipt>';
   if(/<head[^>]*>/i.test(html)) return html.replace(/<head[^>]*>/i, m => m + shim);
   if(/<html[^>]*>/i.test(html)) return html.replace(/<html[^>]*>/i, m => m + shim);
@@ -402,12 +407,29 @@ function renderPreview(html, force=false){
 // 미리보기에서 사용자가 입력한 데이터를 받아 자동 저장
 window.addEventListener('message', (e)=>{
   const d = e.data;
+  if(d && d.__mallo === 'ai'){ handleAiRequest(e.source, d.id, d.prompt); return; }
   if(!(d && d.__mallo === 'data' && d.data)) return;
   S.toolData = d.data;
   // 공유 링크로 연 다른 사람: 내 기기 로컬에만 저장(소유자 데이터는 안 건드림)
   if(S.viewerId && !S.viewerOwner){ try{ localStorage.setItem('mallo_tool_' + S.viewerId, JSON.stringify(d.data)); }catch(e){} return; }
   scheduleSaveData();   // 소유자/빌더: 클라우드 자동 저장
 });
+// 도구가 요청한 AI 호출을 중계: 로그인 토큰으로 /api/ai 호출 후 결과를 도구로 회신(키는 절대 도구로 안 감)
+async function handleAiRequest(src, id, prompt){
+  const reply = (payload)=>{ try{ src && src.postMessage(Object.assign({ __mallo:'ai-result', id }, payload), '*'); }catch(e){} };
+  if(!prompt || !String(prompt).trim()){ reply({ error:'내용을 입력해 주세요' }); return; }
+  if(!S.session){ reply({ error:'AI 기능은 로그인 후 사용할 수 있어요' }); return; }
+  try{
+    const res = await fetch('/api/ai', {
+      method:'POST',
+      headers:{ 'content-type':'application/json', authorization:`Bearer ${S.session.access_token}` },
+      body: JSON.stringify({ prompt: String(prompt).slice(0, 12000) }),
+    });
+    const j = await res.json().catch(()=>({}));
+    if(!res.ok){ reply({ error: j.error || 'AI 처리에 실패했어요' }); return; }
+    reply({ text: j.text || '' });
+  }catch(e){ reply({ error:'AI 연결에 실패했어요' }); }
+}
 let _saveTimer = null;
 function scheduleSaveData(){ clearTimeout(_saveTimer); _saveTimer = setTimeout(persistData, 1200); }
 async function persistData(){
