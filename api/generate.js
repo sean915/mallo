@@ -146,7 +146,13 @@ export default async function handler(req) {
 
   if (!upstream.ok) {
     const detail = await upstream.text().catch(() => '');
-    return json({ error: `AI 호출 실패 (${upstream.status}): ${detail.slice(0, 400)}` }, 502);
+    // 실제 업스트림 오류는 서버 로그에만 남기고, 사용자에겐 공급자/모델이 드러나지 않는 일반 문구만 노출
+    console.error('[generate] upstream error', upstream.status, detail.slice(0, 500));
+    const friendly =
+      upstream.status === 429
+        ? '지금 사용량이 많아요. 잠시 후 다시 시도해 주세요.'
+        : '도구를 만드는 중 문제가 발생했어요. 잠시 후 다시 시도해 주세요.';
+    return json({ error: friendly }, 503);
   }
 
   // 5. 어떤 LLM이든 동일한 형식(data: {"t":"..."})으로 변환해 스트리밍
@@ -187,7 +193,7 @@ export default async function handler(req) {
       'content-type': 'text/event-stream; charset=utf-8',
       'cache-control': 'no-cache',
       'x-remaining': String(quota.remaining ?? ''),
-      'x-model': usedModel, // 어떤 모델이 처리했는지(디버그용)
+      // x-model 헤더 제거: 사용 모델/공급자 노출 방지(영업기밀)
     },
   });
 }
