@@ -86,62 +86,71 @@ export default async function handler(req) {
     : `만들 것: ${prompt}`;
 
   // 4. LLM 호출 (서버 환경변수의 키 사용 — 클라이언트는 모름)
-  const provider = env('LLM_PROVIDER', 'gemini');
-  const key = env('LLM_API_KEY');
-  let upstream, extract, usedModel = '';
-
-  if (provider === 'claude') {
-    usedModel = pickClaudeModel(prompt, !!code); // 난이도 보고 Sonnet/Opus 자동 선택
-    upstream = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': key,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: usedModel,
-        max_tokens: 24000,
-        stream: true,
-        system: SYSTEM_PROMPT,
-        messages: [{ role: 'user', content: userPrompt }],
-      }),
-    });
-    extract = (j) => (j.type === 'content_block_delta' ? j.delta?.text : null);
-  } else if (provider === 'openai') {
-    upstream = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
-      body: JSON.stringify({
-        model: env('LLM_MODEL', 'gpt-4o'),
-        stream: true,
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: userPrompt },
-        ],
-      }),
-    });
-    extract = (j) => j.choices?.[0]?.delta?.content ?? null;
-  } else { // gemini (기본 — 가장 저렴)
-    const model = env('LLM_MODEL', 'gemini-2.0-flash');
-    upstream = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${encodeURIComponent(key)}`,
-      {
+  // 공급자별 요청 빌더 — 1차(유료·고품질)와 폴백(무료) 양쪽에 재사용
+  function buildCall(prov, apiKey, modelName) {
+    if (prov === 'claude') {
+      return {
+        url: 'https://api.anthropic.com/v1/messages',
+        options: {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+          body: JSON.stringify({ model: modelName, max_tokens: 24000, stream: true, system: SYSTEM_PROMPT, messages: [{ role: 'user', content: userPrompt }] }),
+        },
+        extract: (j) => (j.type === 'content_block_delta' ? j.delta?.text : null),
+      };
+    }
+    if (prov === 'openai') {
+      return {
+        url: 'https://api.openai.com/v1/chat/completions',
+        options: {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
+          body: JSON.stringify({ model: modelName, stream: true, messages: [{ role: 'system', content: SYSTEM_PROMPT }, { role: 'user', content: userPrompt }] }),
+        },
+        extract: (j) => j.choices?.[0]?.delta?.content ?? null,
+      };
+    }
+    // gemini (무료 등급 가능 — 폴백 기본)
+    return {
+      url: `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:streamGenerateContent?alt=sse&key=${encodeURIComponent(apiKey)}`,
+      options: {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-          contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-          generationConfig: { thinkingConfig: { thinkingBudget: 0 }, maxOutputTokens: 8192 },
-        }),
-      }
-    );
-    extract = (j) => {
-      const parts = j.candidates?.[0]?.content?.parts;
-      if (!Array.isArray(parts)) return null;
-      const t = parts.map((p) => p.text).filter(Boolean).join('');
-      return t || null;
+        body: JSON.stringify({ systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] }, contents: [{ role: 'user', parts: [{ text: userPrompt }] }], generationConfig: { thinkingConfig: { thinkingBudget: 0 }, maxOutputTokens: 8192 } }),
+      },
+      extract: (j) => {
+        const parts = j.candidates?.[0]?.content?.parts;
+        if (!Array.isArray(parts)) return null;
+        const t = parts.map((p) => p.text).filter(Boolean).join('');
+        return t || null;
+      },
     };
+  }
+
+  const provider = env('LLM_PROVIDER', 'gemini');
+  const key = env('LLM_API_KEY');
+  const primaryModel = provider === 'claude'
+    ? pickClaudeModel(prompt, !!code)
+    : env('LLM_MODEL', provider === 'openai' ? 'gpt-4o' : 'gemini-2.0-flash');
+
+  let call = buildCall(provider, key, primaryModel);
+  let extract = call.extract;
+  let usedModel = primaryModel;
+  let upstream = await fetch(call.url, call.options);
+
+  // 잔액 부족·인증·쿼터 오류(400/401/402/403/429)면 무료 모델로 자동 폴백 → 서비스가 끊기지 않음
+  // 활성화 조건: LLM_FALLBACK_API_KEY 환경변수 설정(기본 공급자 gemini, 모델 gemini-2.0-flash)
+  const FALLBACK_STATUSES = [400, 401, 402, 403, 429];
+  const fbKey = env('LLM_FALLBACK_API_KEY');
+  if (!upstream.ok && fbKey && FALLBACK_STATUSES.includes(upstream.status)) {
+    const errBody = await upstream.text().catch(() => '');
+    console.error('[generate] primary failed → fallback', upstream.status, errBody.slice(0, 300));
+    const fbProvider = env('LLM_FALLBACK_PROVIDER', 'gemini');
+    const fbModel = env('LLM_FALLBACK_MODEL', 'gemini-2.0-flash');
+    const fbCall = buildCall(fbProvider, fbKey, fbModel);
+    upstream = await fetch(fbCall.url, fbCall.options);
+    extract = fbCall.extract;
+    usedModel = `${fbModel}#fallback`;
   }
 
   if (!upstream.ok) {
