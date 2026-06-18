@@ -326,19 +326,23 @@
   </div>
 </div>
 
-<!-- 내려받기 방식 선택 -->
+<!-- 내려받기: OS별 실행파일 선택 -->
 <div class="overlay hidden" id="dlModal">
   <div class="modal">
-    <h2 style="font-size:20px;font-weight:800;margin:0 0 4px">어떻게 받을까요?</h2>
-    <p class="sub" style="margin:0 0 16px">용도에 맞게 선택하세요.</p>
+    <h2 style="font-size:20px;font-weight:800;margin:0 0 4px">어떤 컴퓨터에서 쓰실 건가요?</h2>
+    <p class="sub" style="margin:0 0 16px">선택한 OS용 실행파일 하나로 받아, 더블클릭하면 바로 실행돼요.</p>
     <div class="planbox">
-      <button class="plan" id="dlExe" style="opacity:.65">
-        <div><div class="pn">윈도우 애플리케이션 <span class="badge" style="background:#8b95a1">베타 준비중</span></div><div class="pd">설치파일(.exe)로 받아 더블클릭 실행 · 아무것도 몰라도 바로 사용</div></div>
+      <button class="plan dlos" data-os="windows" style="opacity:.65">
+        <div><div class="pn">🪟 Windows용 <span class="badge" style="background:#8b95a1">베타 준비중</span></div><div class="pd">.exe 실행파일 하나 · 설치 없이 바로 실행</div></div>
         <div class="pv">유료</div>
       </button>
-      <button class="plan best" id="dlWeb">
-        <div><div class="pn">웹앱으로 받기 <span class="badge">무료</span></div><div class="pd">HTML 파일로 받기 · 더블클릭하면 어디서든 열려요</div></div>
-        <div class="pv">무료</div>
+      <button class="plan dlos" data-os="mac" style="opacity:.65">
+        <div><div class="pn">🍎 Mac용 <span class="badge" style="background:#8b95a1">베타 준비중</span></div><div class="pd">앱 파일 하나 · 더블클릭 실행</div></div>
+        <div class="pv">유료</div>
+      </button>
+      <button class="plan dlos" data-os="linux" style="opacity:.65">
+        <div><div class="pn">🐧 Linux용 <span class="badge" style="background:#8b95a1">베타 준비중</span></div><div class="pd">실행파일 하나 · 바로 실행</div></div>
+        <div class="pv">유료</div>
       </button>
     </div>
     <button class="bigbtn gray" id="dlClose" style="margin-top:14px">닫기</button>
@@ -849,36 +853,18 @@ $('btnInstallApp').onclick = ()=>{
   location.href = location.origin + '/?t=' + S.currentToolId;   // 앱 화면으로 → 거기서 설치
 };
 
-// 내려받기 버튼 → 방식 선택 모달
+// 내려받기 버튼 → OS 선택 모달
 $('btnDownload').onclick = ()=>{
   if(!S.code){ toast('아직 만든 도구가 없어요'); return; }
   $('dlModal').classList.remove('hidden');
 };
 $('dlClose').onclick = ()=> $('dlModal').classList.add('hidden');
 $('dlModal').onclick = (e)=>{ if(e.target === $('dlModal')) $('dlModal').classList.add('hidden'); };
-// ① 윈도우 애플리케이션 — 베타 준비중(잠금). 정식: WPF/WebView2 기반 .exe·설치파일, 유료(포팅 토큰 2배 마진)
-$('dlExe').onclick = ()=>{ toast('윈도우 앱(.exe)은 베타 준비중이에요. 정식 오픈 때 제공돼요 🙏'); };
-// ② 웹앱으로 받기 — 무료(지금처럼 HTML)
-$('dlWeb').onclick = ()=>{ $('dlModal').classList.add('hidden'); doWebDownload(); };
-function doWebDownload(){
-  if(!S.code){ toast('아직 만든 도구가 없어요'); return; }
-  // 내려받은 파일은 PC에서 단독 실행되므로 진짜 localStorage 사용 가능.
-  // 지금까지 입력한 데이터를 실제 localStorage에 미리 넣어 그대로 보존.
-  let html = S.code;
-  try{
-    const seed = JSON.stringify(S.toolData || {}).replace(/</g, '\\u003c');
-    const inj = '<scr'+'ipt>try{var s='+seed+';for(var k in s){localStorage.setItem(k,s[k]);}}catch(e){}</scr'+'ipt>';
-    if(/<head[^>]*>/i.test(html)) html = html.replace(/<head[^>]*>/i, m => m + inj);
-    else html = inj + html;
-  }catch(e){}
-  html = withBadge(html, location.origin);   // "말로로 만들었어요" 바이럴 배지
-  const blob = new Blob([html], {type:'text/html'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = '내가만든도구.html';
-  a.click();
-  toast('내려받았어요! 더블클릭하면 어디서든 열려요 🎉');
-}
+// OS별 실행파일 다운로드 — 베타 준비중(잠금). 정식: OS별 단일 실행파일(Tauri/WebView 래퍼), 유료(만든 가격 마진 2배)
+const OS_NAME = { windows:'Windows', mac:'Mac', linux:'Linux' };
+document.querySelectorAll('.dlos').forEach(b=>{
+  b.onclick = ()=>{ toast((OS_NAME[b.dataset.os] || '') + '용 앱은 베타 준비중이에요. 정식 오픈 때 제공돼요 🙏'); };
+});
 
 /* 피드백 / 베타 안내 */
 function updateStars(){
