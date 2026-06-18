@@ -1,11 +1,13 @@
 // 공용 유틸 (Vercel Edge Functions)
 
-// 구독 플랜 (단일 출처) — 가격(원)/월 생성(만들기·수정) 횟수
-export const PLANS = {
-  light:    { name: '라이트',   price: 9900,  limit: 10 },
-  standard: { name: '스탠다드', price: 24900, limit: 25 },
-  pro:      { name: '프로',     price: 49000, limit: 50 },
+// 이용권 팩 (단일 출처) — 1회성 구매, 가격(원)/충전 횟수(credits). 만료 없음.
+export const PACKS = {
+  light:    { name: '라이트',   price: 9900,  credits: 10 },
+  standard: { name: '스탠다드', price: 24900, credits: 25 },
+  pro:      { name: '프로',     price: 49000, credits: 50 },
 };
+// 하위호환 별칭(구 구독 코드가 참조해도 빌드 깨지지 않도록)
+export const PLANS = PACKS;
 
 export function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), {

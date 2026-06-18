@@ -26,21 +26,22 @@ export default async function handler(req) {
     } catch (e) { /* 조회 실패 시 기본값 */ }
 
     if (!p) {
-      p = { created_at: new Date().toISOString(), subscribed: false, unlimited: false, usage_month: '', usage_count: 0 };
+      p = { created_at: new Date().toISOString(), unlimited: false, usage_count: 0, credits: 0 };
     }
 
     const trialLimit = Number(env('TRIAL_LIMIT', String(TRIAL_LIMIT)));
-    const limit = Number(env('MONTHLY_LIMIT', '100'));
-    const used = Number(p.usage_count || 0);          // 평생 사용 횟수(무료 체험 기준)
-    const trialLeft = Math.max(0, trialLimit - used); // 남은 '횟수'
+    const used = Number(p.usage_count || 0);          // 무료 체험 사용 횟수
+    const trialLeft = Math.max(0, trialLimit - used); // 남은 무료 체험 횟수
+    const credits = Number(p.credits || 0);           // 충전한 이용권 잔여 횟수
+    const remaining = trialLeft + credits;            // 총 사용 가능 횟수
 
     return json({
       email: user.email,
-      subscribed: !!p.subscribed,
       unlimited: isMaster || !!p.unlimited,
       trialLeft,
+      credits,
+      remaining,
       used,
-      limit,
     });
   } catch (e) {
     return json({ error: '상태 조회 중 오류' }, 500);

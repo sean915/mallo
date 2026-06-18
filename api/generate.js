@@ -76,12 +76,12 @@ export default async function handler(req) {
   const quota = await rpc.json();
   if (!quota.allowed) {
     const MSG = {
-      trial_over: '무료 체험 3회를 모두 썼어요. 베타 기간이라 지금은 여기까지예요 🙏 후기를 남겨 주시면 큰 힘이 됩니다!',
-      limit: '이번 달 만들기 횟수를 모두 썼어요. 다음 달 1일에 다시 충전돼요.',
+      no_credit: '무료 횟수를 모두 썼어요. 이용권을 충전하면 계속 만들 수 있어요 ⚡',
+      trial_over: '무료 횟수를 모두 썼어요. 이용권을 충전하면 계속 만들 수 있어요 ⚡',
       cooldown: '조금 빠르네요! 몇 초 뒤에 다시 시도해 주세요 🙂',
       busy: '지금 접속이 많아 잠시 쉬어가는 중이에요. 잠시 후 다시 시도해 주세요 🙏',
     };
-    const code = quota.reason || 'limit';
+    const code = quota.reason || 'no_credit';
     const status = (code === 'cooldown' || code === 'busy') ? 429 : 402;
     return json({ error: MSG[code] || MSG.limit, code }, status);
   }
