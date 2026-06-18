@@ -106,7 +106,8 @@ export default async function handler(req) {
         options: {
           method: 'POST',
           headers: { 'content-type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-          body: JSON.stringify({ model: modelName, max_tokens: Number(env('MAX_TOKENS', '16000')), stream: true, system: SYSTEM_PROMPT, messages: [{ role: 'user', content: userPrompt }] }),
+          // 시스템 프롬프트를 프롬프트 캐싱(ephemeral)으로 — 매 호출 동일하므로 캐시 적중 시 입력비 ~90%↓ + TTFT↑
+        body: JSON.stringify({ model: modelName, max_tokens: Number(env('MAX_TOKENS', '16000')), stream: true, system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }], messages: [{ role: 'user', content: userPrompt }] }),
         },
         extract: (j) => (j.type === 'content_block_delta' ? j.delta?.text : null),
       };
