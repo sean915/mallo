@@ -1,4 +1,16 @@
 {
+  "rewrites": [
+    {
+      "source": "/",
+      "has": [
+        {
+          "type": "query",
+          "key": "t"
+        }
+      ],
+      "destination": "/api/viewer"
+    }
+  ],
   "headers": [
     {
       "source": "/(.*)",
