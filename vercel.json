@@ -1,4 +1,6 @@
 {
+  "buildCommand": "node scripts/patch-index.js",
+  "outputDirectory": ".",
   "redirects": [
     {
       "source": "/",
