@@ -597,14 +597,15 @@ async function refreshMe(){
     if(!res.ok) return;
     S.me = await res.json();
     const b = $('trialBadge');
+    const rem = Number(S.me.remaining != null ? S.me.remaining : (S.me.trialLeft || 0));
     if(S.me.unlimited){
       b.textContent = '♾️ 무제한 (마스터)';
       b.classList.remove('expired');
-    } else if(S.me.trialLeft > 0){
-      b.textContent = `🧪 베타 체험 ${S.me.trialLeft}회 남음`;
+    } else if(rem > 0){
+      b.textContent = `⚡ 남은 횟수 ${rem}회`;
       b.classList.remove('expired');
     } else {
-      b.textContent = '🧪 베타 체험 종료';
+      b.textContent = '⚡ 충전 필요';
       b.classList.add('expired');
     }
   }catch(e){}
@@ -619,67 +620,71 @@ $('btnKakao').onclick = ()=> S.supabase.auth.signInWithOAuth({
 });
 $('btnLogout').onclick = async ()=>{ await S.supabase.auth.signOut(); location.reload(); };
 
-/* ================== 결제(포트원 · 카카오페이 정기결제) ================== */
-// 모달에 플랜 카드 렌더링
+/* ================== 결제(포트원 · 카카오페이 단건결제 · 이용권 충전) ================== */
+// 모달에 이용권 카드 렌더링
 function renderPlans(){
   const box = $('planBox'); if(!box) return;
-  const plans = (S.cfg && S.cfg.plans) || {};
+  const packs = (S.cfg && S.cfg.plans) || {};
   box.innerHTML = '';
-  Object.entries(plans).forEach(([id, p], i)=>{
+  Object.entries(packs).forEach(([id, p])=>{
     const b = document.createElement('button');
     b.className = 'plan' + (id === 'standard' ? ' best' : '');
     const badge = id === 'standard' ? '<span class="badge">인기</span>' : '';
-    b.innerHTML = '<div><div class="pn">'+p.name+badge+'</div><div class="pd">월 만들기 '+p.limit+'회 · 만든 도구 사용은 무제한</div></div><div class="pv">'+p.price.toLocaleString()+'원</div>';
-    b.onclick = ()=> startSubscribe(id);
+    const per = p.credits ? Math.round(p.price / p.credits) : p.price;
+    b.innerHTML = '<div><div class="pn">'+p.name+badge+'</div><div class="pd">'+p.credits+'회 이용권 · 회당 '+per.toLocaleString()+'원 · 만료 없음</div></div><div class="pv">'+p.price.toLocaleString()+'원</div>';
+    b.onclick = ()=> startPurchase(id);
     box.appendChild(b);
   });
 }
-async function startSubscribe(planId){
+async function startPurchase(packId){
   if(!payConfigured()){ toast('결제 준비 중이에요'); return; }
   if(!S.session){ toast('로그인이 필요해요'); return; }
   if(!window.PortOne){ toast('결제 모듈을 불러오는 중이에요. 잠시 후 다시 눌러주세요'); return; }
-  if(S.subBusy) return; S.subBusy = true;
-  const plan = (S.cfg.plans && S.cfg.plans[planId]) || {};
+  if(S.payBusy) return; S.payBusy = true;
+  const pack = (S.cfg.plans && S.cfg.plans[packId]) || {};
+  const paymentId = `mallo-${S.session.user.id}-${Date.now()}`;
   try{
-    try{ localStorage.setItem('mallo_plan', planId); }catch(e){}   // 모바일 복귀 시 플랜 기억
-    const rsp = await PortOne.requestIssueBillingKey({
+    try{ localStorage.setItem('mallo_pack', packId); localStorage.setItem('mallo_pid', paymentId); }catch(e){}  // 모바일 복귀용
+    const rsp = await PortOne.requestPayment({
       storeId: S.cfg.payStoreId,
       channelKey: S.cfg.payChannelKey,
-      billingKeyMethod: 'EASY_PAY',
-      issueId: `mallo-${Date.now()}`,
-      issueName: '말로 ' + (plan.name || '') + ' 구독',
+      paymentId,
+      orderName: '말로 이용권 ' + (pack.name || '') + ' (' + (pack.credits||'') + '회)',
+      totalAmount: pack.price,
+      currency: 'CURRENCY_KRW',
+      payMethod: 'EASY_PAY',
       customer: { customerId: S.session.user.id, email: S.session.user.email },
       redirectUrl: location.origin + '/?pay=return',   // 모바일에서 카카오페이 후 복귀
     });
     if(!rsp || rsp.code != null){ toast('결제가 취소됐어요'); return; }   // 데스크톱(팝업) 경로
-    await activateWithBillingKey(rsp.billingKey, planId);
+    await confirmPurchase(rsp.paymentId || paymentId, packId);
   }catch(e){ toast('결제 중 문제가 생겼어요. 잠시 후 다시 시도해 주세요'); }
-  finally{ S.subBusy = false; }
+  finally{ S.payBusy = false; }
 }
-async function activateWithBillingKey(billingKey, planId){
-  if(!billingKey || !S.session) return;
-  const res = await fetch('/api/subscribe', {
+async function confirmPurchase(paymentId, packId){
+  if(!paymentId || !S.session) return;
+  const res = await fetch('/api/purchase', {
     method:'POST',
     headers:{ 'content-type':'application/json', authorization:`Bearer ${S.session.access_token}` },
-    body: JSON.stringify({ billingKey, planId })
+    body: JSON.stringify({ paymentId, packId })
   });
-  if(!res.ok){ toast('결제에 실패했어요. 카카오페이 한도를 확인해 주세요'); return; }
-  track('subscribe', { plan: planId });
-  try{ localStorage.removeItem('mallo_plan'); }catch(e){}
+  if(!res.ok){ toast('결제 확인에 실패했어요. 잠시 후 다시 확인해 주세요'); return; }
+  track('purchase', { pack: packId });
+  try{ localStorage.removeItem('mallo_pack'); localStorage.removeItem('mallo_pid'); }catch(e){}
   $('fbModal').classList.add('hidden');
   await refreshMe();
-  toast('구독 완료! 이제 계속 만들 수 있어요 🎉');
+  toast('충전 완료! 이제 계속 만들 수 있어요 🎉');
 }
 // 모바일: 카카오페이 결제 후 redirectUrl 로 돌아왔을 때 처리
 function handlePayReturn(){
   const q = new URLSearchParams(location.search);
   if(q.get('pay') !== 'return') return;
-  const bk = q.get('billingKey');
-  let planId = 'light';
-  try{ planId = localStorage.getItem('mallo_plan') || 'light'; }catch(e){}
+  let pid = q.get('paymentId');
+  let packId = 'light';
+  try{ pid = pid || localStorage.getItem('mallo_pid'); packId = localStorage.getItem('mallo_pack') || 'light'; }catch(e){}
   history.replaceState({}, '', location.origin + location.pathname);
-  if(bk && S.session){ activateWithBillingKey(bk, planId); }
-  else if(q.get('code')){ toast('결제가 취소됐어요'); }
+  if(q.get('code')){ toast('결제가 취소됐어요'); return; }
+  if(pid && S.session){ confirmPurchase(pid, packId); }
 }
 
 /* ================== 생성 플로우 ================== */
@@ -858,8 +863,8 @@ function openFeedback(beta){
   const payOn = payConfigured();
   if(beta){
     if(payOn){
-      $('fbTitle').textContent = '무료 3회를 다 쓰셨어요 🎉';
-      $('fbSub').textContent = '구독하면 계속 만들 수 있어요. 카카오페이로 지문 한 번이면 바로 시작돼요.';
+      $('fbTitle').textContent = '무료 횟수를 다 쓰셨어요 🎉';
+      $('fbSub').textContent = '이용권을 충전하면 계속 만들 수 있어요. 카카오페이로 한 번만 결제하면 끝, 구매한 횟수는 만료 없이 계속 쓸 수 있어요.';
     } else {
       $('fbTitle').textContent = '무료 체험 3회가 끝났어요 🧪';
       $('fbSub').textContent = '말로는 아직 베타 테스트 버전이에요. 지금은 결제 없이 준비 중이고, 정식 오픈하면 알려드릴게요. 써보신 후기를 남겨 주시면 큰 힘이 됩니다!';
