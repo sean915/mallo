@@ -41,5 +41,33 @@ replaceOnce(
   'shared viewer seed'
 );
 
+replaceOnce(
+`async function shareTool(id){
+  try{ await S.supabase.from('tools').update({ shared: true }).eq('id', id); }catch(e){}
+  const link = location.origin + '/?t=' + id;
+  try{ await navigator.clipboard.writeText(link); toast('공유 링크를 복사했어요! 붙여넣어 보내세요 🔗'); }
+  catch(e){ prompt('이 링크를 복사해 공유하세요:', link); }
+}
+`,
+`async function shareTool(id){
+  let shareId = null;
+  try{
+    const { data: tool, error: loadError } = await S.supabase.from('tools').select('title,html').eq('id', id).single();
+    if(loadError || !tool) throw loadError || new Error();
+    const { data: copy, error: copyError } = await S.supabase.from('tools')
+      .insert({ user_id: S.session.user.id, title: tool.title || '내 도구', html: tool.html || '', data: {}, shared: true })
+      .select('id')
+      .single();
+    if(copyError || !copy) throw copyError || new Error();
+    shareId = copy.id;
+  }catch(e){ toast('공유 링크를 만들지 못했어요'); return; }
+  const link = location.origin + '/?t=' + shareId;
+  try{ await navigator.clipboard.writeText(link); toast('공유 링크를 복사했어요! 붙여넣어 보내세요 🔗'); }
+  catch(e){ prompt('이 링크를 복사해 공유하세요:', link); }
+}
+`,
+  'sanitized share copy'
+);
+
 writeFileSync(path, html);
 console.log('Patched index.html security guards');
