@@ -54,6 +54,40 @@ function pickClaudeModel(prompt, hasCode) {
   return (redo || complex || longReq) ? opus : sonnet;
 }
 
+// 프롬프트 보정: 비전문가의 짧고 모호한 요청 → 구체적 요구사항으로 확장.
+// 비용·속도 위해 무료 모델(Gemini)로 처리. 키 없거나 실패하면 null 반환 → 원본 프롬프트 사용(안전).
+async function boostPrompt(prompt) {
+  let key = '';
+  try { key = env('AI_API_KEY'); } catch {}
+  if (!key) { try { key = env('LLM_FALLBACK_API_KEY'); } catch {} }
+  if (!key) return null;
+  const model = env('BOOST_MODEL', 'gemini-2.5-flash');
+  const sys = '당신은 비전문가의 짧은 요청을 받아, 개발자가 바로 구현할 수 있는 명확한 "웹 업무 도구 요구사항"으로 확장하는 기획자입니다. 한국어로 150단어 이내, 간결한 불릿으로: 핵심 기능, 필요한 입력 항목(필드), 화면 구성, 한눈에 보는 요약 지표, 샘플 데이터 성격. 사용자가 말하지 않은 부분은 가장 상식적인 기본값으로 채우되 과하게 부풀리지 마세요. 코드는 쓰지 말고 요구사항만 출력.';
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        signal: ctrl.signal,
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: sys }] },
+          contents: [{ role: 'user', parts: [{ text: '사용자 요청: ' + prompt }] }],
+          generationConfig: { temperature: 0.4, maxOutputTokens: 600 },
+        }),
+      }
+    );
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    const j = await res.json();
+    const parts = j.candidates?.[0]?.content?.parts;
+    const text = Array.isArray(parts) ? parts.map((p) => p.text).filter(Boolean).join('').trim() : '';
+    return text || null;
+  } catch { return null; }
+}
+
 export default async function handler(req) {
   if (req.method !== 'POST') return json({ error: '허용되지 않은 요청이에요' }, 405);
 
@@ -93,9 +127,16 @@ export default async function handler(req) {
   if (!prompt || typeof prompt !== 'string' || prompt.length > 4000) {
     return json({ error: '요청 내용을 확인해 주세요 (최대 4000자)' }, 400);
   }
+  // 프롬프트 보정: 신규 생성일 때만, 무료 모델로 모호한 요청을 구체적 요구사항으로 확장(실패 시 원본 사용)
+  let spec = null;
+  if (!code && env('PROMPT_BOOST', '1') !== '0') {
+    spec = await boostPrompt(prompt);
+  }
   const userPrompt = code
     ? `기존 앱 코드:\n\`\`\`html\n${code}\n\`\`\`\n\n수정 요청: ${prompt}`
-    : `만들 것: ${prompt}`;
+    : (spec
+        ? `만들 것(사용자 요청): ${prompt}\n\n[참고 — 아래는 위 요청을 구체화한 요구사항입니다. 사용자의 원래 의도를 우선하되, 빠진 부분을 채우는 참고로만 쓰세요]\n${spec}`
+        : `만들 것: ${prompt}`);
 
   // 4. LLM 호출 (서버 환경변수의 키 사용 — 클라이언트는 모름)
   // 공급자별 요청 빌더 — 1차(유료·고품질)와 폴백(무료) 양쪽에 재사용
