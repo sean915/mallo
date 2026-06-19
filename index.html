@@ -298,133 +298,86 @@
     </div>
     <textarea id="fbText" rows="4" placeholder="자유롭게 후기를 남겨 주세요 (예: 어떤 앱을 만들고 싶었는지, 아쉬운 점)" style="width:100%;border:2px solid var(--line);border-radius:12px;padding:12px 14px;font-size:15px;font-family:inherit;line-height:1.5;resize:none;outline:none;box-sizing:border-box"></textarea>
     <div class="planbox hidden" id="planBox"></div>
-    <button class="bigbtn" id="btnFbSend">보내기</button>
+    <button class="bigbtn" id="btnFbSend">의견 보내기</button>
     <button class="bigbtn gray" id="btnFbClose">닫기</button>
   </div>
 </div>
 
-<!-- 도구 단독 뷰어 (공유 링크 / 설치형 앱으로 열릴 때) -->
+<!-- 내 도구함 모달 -->
+<div class="overlay hidden" id="toolsModal">
+  <div class="modal">
+    <h2>내 도구함 📂</h2>
+    <p class="sub">내가 만든 도구들이 자동 저장돼요. 언제든 다시 열고, 앱처럼 설치하거나 공유할 수 있어요.</p>
+    <div class="tool-list" id="toolList"></div>
+    <button class="bigbtn gray" id="btnToolsClose">닫기</button>
+    <button class="bigbtn gray" id="btnDeleteAcct" style="margin-top:10px;color:#f04452;background:#fff;border:1px solid #ffdde2;font-size:13px">회원 탈퇴</button>
+  </div>
+</div>
+
+<!-- OS별 앱 다운로드 모달 -->
+<div class="overlay hidden" id="dlModal">
+  <div class="modal">
+    <h2>내 앱으로 내려받기 💻</h2>
+    <p class="sub">지금 만든 도구를 윈도우·맥·리눅스에서 실행할 수 있는 앱으로 묶어 드려요.</p>
+    <div id="dlOsBox" style="display:flex;flex-direction:column;gap:9px;margin-top:18px">
+      <button class="plan dlos" data-os="win"><div><div class="pn">Windows용 앱</div><div class="pd">ZIP 다운로드 · exe 실행</div></div><div class="pv">윈도우</div></button>
+      <button class="plan dlos" data-os="mac"><div><div class="pn">macOS용 앱</div><div class="pd">ZIP 다운로드 · .app 실행</div></div><div class="pv">맥</div></button>
+      <button class="plan dlos" data-os="linux"><div><div class="pn">Linux용 앱</div><div class="pd">ZIP 다운로드 · AppImage 실행</div></div><div class="pv">리눅스</div></button>
+    </div>
+    <div id="dlProgress" style="display:none;margin-top:20px;padding:18px;border-radius:14px;background:var(--bg);text-align:center;color:var(--sub);font-size:14px;font-weight:600">
+      앱 파일을 준비하고 있어요… 잠시만 기다려 주세요.
+    </div>
+    <button class="bigbtn gray" id="dlClose">닫기</button>
+  </div>
+</div>
+
+<!-- 도구 단독 뷰어 -->
 <div class="viewer" id="viewer">
   <div class="vbar">
     <div class="vlogo">말<b>로</b></div>
     <div class="vtitle" id="vTitle">내 도구</div>
-    <button class="vbtn ghost hidden" id="vEdit">✏️ 편집</button>
-    <button class="vbtn prim hidden" id="vMake">⚡ 나도 만들기</button>
-    <button class="vbtn ghost" id="vInstall">📲 앱으로 설치</button>
+    <button class="vbtn ghost" id="vMake">나도 만들기</button>
+    <button class="vbtn ghost hidden" id="vEdit">편집</button>
+    <button class="vbtn prim" id="vInstall">앱으로 설치</button>
   </div>
   <iframe id="vframe" sandbox="allow-scripts allow-modals allow-forms allow-popups"></iframe>
 </div>
 
-<!-- 내 도구함 -->
-<div class="overlay hidden" id="toolsModal">
-  <div class="modal">
-    <h2>📂 내 도구함</h2>
-    <p class="sub">만든 도구가 자동 저장돼요. 다시 열어서 이어 쓰면 입력한 내용도 그대로 남아 있어요.</p>
-    <div class="tool-list" id="toolList"></div>
-    <button class="bigbtn gray" id="btnToolsClose">닫기</button>
-    <p style="text-align:center;margin-top:14px"><a href="#" id="btnDeleteAcct" style="font-size:12.5px;color:#8b95a1;text-decoration:underline">회원 탈퇴 (계정·데이터 영구 삭제)</a></p>
-  </div>
-</div>
-
-<!-- 내려받기: OS별 실행파일 선택 -->
-<div class="overlay hidden" id="dlModal">
-  <div class="modal">
-    <h2 style="font-size:20px;font-weight:800;margin:0 0 4px">어떤 컴퓨터에서 쓰실 건가요?</h2>
-    <p class="sub" style="margin:0 0 16px">ZIP 파일 받아 압축 풀고 더블클릭하면 바로 실행돼요. 설치 없이 사용 가능.</p>
-    <div class="planbox" id="dlOsBox">
-      <button class="plan dlos" data-os="windows">
-        <div><div class="pn">🪟 Windows</div><div class="pd">.exe 실행파일 · Windows 10/11 · 설치 불필요</div></div>
-        <div class="pv" style="font-size:13px;color:var(--green);font-weight:700">무료</div>
-      </button>
-      <button class="plan dlos" data-os="mac-arm">
-        <div><div class="pn">🍎 Mac (Apple Silicon)</div><div class="pd">M1/M2/M3/M4 칩 · macOS 11+</div></div>
-        <div class="pv" style="font-size:13px;color:var(--green);font-weight:700">무료</div>
-      </button>
-      <button class="plan dlos" data-os="mac-x64">
-        <div><div class="pn">🍎 Mac (Intel)</div><div class="pd">Intel 칩 · macOS 10.15+</div></div>
-        <div class="pv" style="font-size:13px;color:var(--green);font-weight:700">무료</div>
-      </button>
-      <button class="plan dlos" data-os="linux">
-        <div><div class="pn">🐧 Linux</div><div class="pd">x64 · Ubuntu 20.04+ / Debian</div></div>
-        <div class="pv" style="font-size:13px;color:var(--green);font-weight:700">무료</div>
-      </button>
-    </div>
-    <div id="dlProgress" style="display:none;text-align:center;padding:16px 0">
-      <div class="dots" style="font-size:15px;color:var(--sub)">패키지 만드는 중<span class="dots-anim"></span></div>
-      <p style="font-size:13px;color:var(--sub);margin-top:6px">잠시만요, 곧 다운로드가 시작돼요</p>
-    </div>
-    <button class="bigbtn gray" id="dlClose" style="margin-top:14px">닫기</button>
-  </div>
-</div>
-
 <div class="toast" id="toast"></div>
 
-<script type="module">
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-
-/* ================== 상태 ================== */
-const S = { supabase:null, session:null, code:'', codeHistory:false, busy:false, me:null, currentToolId:null, toolData:{} };
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
 const $ = id => document.getElementById(id);
+const { createClient } = supabase;
 
-/* ================== 모바일 탭 전환 ================== */
+const S = {
+  session:null, supabase:null, me:null, cfg:null, busy:false, loggedTracked:false,
+  code:'', codeHistory:false, currentToolId:null, toolData:{}, viewerId:null, viewerOwner:false,
+  payBusy:false, fbRating:0
+};
+const WORKING_STEPS = ['요청을 이해하는 중', '화면을 설계하는 중', '기능을 만드는 중', '마무리 점검 중'];
+function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2600); }
+function addMsg(role, text, cls=''){
+  const el=document.createElement('div'); el.className='msg '+role+(cls?' '+cls:''); el.textContent=text; $('chat').appendChild(el); $('chat').scrollTop=$('chat').scrollHeight; return el;
+}
+
+/* ================== 모바일 탭 ================== */
 const mq = window.matchMedia('(max-width:768px)');
 function setPane(p){
-  $('mainEl').classList.toggle('preview', p === 'preview');
-  document.querySelectorAll('.mtab').forEach(b => b.classList.toggle('active', b.dataset.pane === p));
+  $('mainEl').classList.toggle('preview', p==='preview');
+  document.querySelectorAll('.mtab').forEach(b=>b.classList.toggle('active', b.dataset.pane===p));
 }
-document.querySelectorAll('.mtab').forEach(b => b.onclick = ()=> setPane(b.dataset.pane));
+$('mtabs').addEventListener('click', e=>{ const b=e.target.closest('.mtab'); if(b) setPane(b.dataset.pane); });
 
-/* ================== UI 유틸 ================== */
-function toast(msg){
-  const t = $('toast'); t.textContent = msg; t.classList.add('show');
-  clearTimeout(t._tm); t._tm = setTimeout(()=>t.classList.remove('show'), 2600);
-}
-function addMsg(role, text, cls=''){
-  const d = document.createElement('div');
-  d.className = `msg ${role} ${cls}`;
-  d.textContent = text;
-  $('chat').appendChild(d);
-  $('chat').scrollTop = $('chat').scrollHeight;
-  return d;
-}
-const WORKING_STEPS = ['요구사항을 읽고 있어요','설계하는 중이에요','만드는 중이에요','화면을 그리는 중이에요','마무리하는 중이에요'];
-
-/* ================== 미리보기 ================== */
-function extractHtml(text){
-  const i = text.indexOf('```html');
-  if(i === -1){
-    const j = text.indexOf('<!DOCTYPE');
-    return j !== -1 ? text.slice(j).replace(/```\s*$/,'') : '';
-  }
-  let body = text.slice(i + 7);
-  const end = body.indexOf('```');
-  if(end !== -1) body = body.slice(0, end);
-  return body.trim();
-}
-// 미리보기 iframe은 보안 샌드박스라 localStorage가 막혀 데이터가 안 남음.
-// → localStorage를 가짜로 갈아끼워 메모리에 담고, 변경분을 부모(말로)로 보내 DB에 저장.
-//   도구를 다시 열 때는 저장된 데이터를 seed로 주입해 그대로 복원.
+/* ================== 생성 코드 ↔ 미리보기 데이터 저장 shim ================== */
 function withShim(html, seed){
-  const seedJson = JSON.stringify(seed || {}).replace(/</g, '\\u003c');
-  const shim = '<scr'+'ipt>(function(){try{'
-    + 'var mem=' + seedJson + ';var ses={};var P=window.parent;'
-    + 'function notify(){try{P.postMessage({__mallo:"data",data:mem},"*");}catch(e){}}'
-    + 'function mk(store,persist){return{getItem:function(k){k=String(k);return Object.prototype.hasOwnProperty.call(store,k)?store[k]:null;},setItem:function(k,v){store[String(k)]=String(v);if(persist)notify();},removeItem:function(k){delete store[String(k)];if(persist)notify();},clear:function(){Object.keys(store).forEach(function(k){delete store[k];});if(persist)notify();},key:function(i){return Object.keys(store)[i]||null;},get length(){return Object.keys(store).length;}};}'
-    + 'Object.defineProperty(window,"localStorage",{value:mk(mem,true),configurable:true});'
-    + 'Object.defineProperty(window,"sessionStorage",{value:mk(ses,false),configurable:true});'
-    // 내장 AI: 도구는 키를 모른 채 window.말로.ai("...") 만 호출 → 부모(말로)가 /api/ai로 중계
-    + 'var _aiq={},_aid=0;'
-    + 'function _ai(prompt){return new Promise(function(res,rej){var id=++_aid;_aiq[id]={res:res,rej:rej};try{P.postMessage({__mallo:"ai",id:id,prompt:String(prompt==null?"":prompt)},"*");}catch(e){rej(e);}setTimeout(function(){if(_aiq[id]){_aiq[id].rej(new Error("AI \\uc751\\ub2f5 \\uc2dc\\uac04 \\ucd08\\uacfc"));delete _aiq[id];}},60000);});}'
-    + 'window.addEventListener("message",function(e){var d=e.data;if(!d||d.__mallo!=="ai-result")return;var q=_aiq[d.id];if(!q)return;delete _aiq[d.id];if(d.error)q.rej(new Error(d.error));else q.res(d.text||"");});'
-    + 'var _A={ai:_ai};window["\\ub9d0\\ub85c"]=_A;window.mallo=_A;'
-    + '}catch(e){}})();</scr'+'ipt>';
+  const seedJson = JSON.stringify(seed || {}).replace(/<\/script/gi, '<\\/script');
+  const shim = `<script>\n(function(){\n  const SEED=${seedJson};\n  const KEY='__mallo_internal__';\n  const listeners=[];\n  const memory={};\n  function post(){ try{ parent.postMessage({__mallo:'data',data:memory},'*'); }catch(e){} }\n  function patch(){\n    const rawSet=localStorage.setItem.bind(localStorage), rawGet=localStorage.getItem.bind(localStorage), rawRemove=localStorage.removeItem.bind(localStorage);\n    localStorage.setItem=function(k,v){ memory[k]=v; post(); try{return rawSet(k,v)}catch(e){} };\n    localStorage.getItem=function(k){ if(Object.prototype.hasOwnProperty.call(memory,k)) return memory[k]; try{return rawGet(k)}catch(e){return null} };\n    localStorage.removeItem=function(k){ delete memory[k]; post(); try{return rawRemove(k)}catch(e){} };\n  }\n  try{ Object.assign(memory, SEED||{}); patch(); }catch(e){}\n  window.말로 = window.말로 || {}; window.mallo = window.mallo || window.말로;\n  window.말로.ai = window.mallo.ai = function(prompt){\n    return new Promise((resolve,reject)=>{\n      const id=Math.random().toString(36).slice(2);\n      listeners[id]={resolve,reject};\n      parent.postMessage({__mallo:'ai',id,prompt:String(prompt||'')},'*');\n      setTimeout(()=>{ if(listeners[id]){ delete listeners[id]; reject(new Error('AI 응답 시간이 초과됐어요')); }},30000);\n    });\n  };\n  window.addEventListener('message',e=>{ const d=e.data; if(d&&d.__mallo==='ai_result'&&listeners[d.id]){ const l=listeners[d.id]; delete listeners[d.id]; d.error?l.reject(new Error(d.error)):l.resolve(d.text||''); } });\n})();\n<\/script>`;
   if(/<head[^>]*>/i.test(html)) return html.replace(/<head[^>]*>/i, m => m + shim);
-  if(/<html[^>]*>/i.test(html)) return html.replace(/<html[^>]*>/i, m => m + shim);
   return shim + html;
 }
-// 생성물 우하단에 "말로로 만들었어요" 바이럴 배지(공유/설치/다운로드 시 노출 → 받는 사람 유입)
 function withBadge(html, origin){
-  const url = (origin || 'https://mallo-alpha.vercel.app') + '/';
+  const url = (origin || location.origin) + '/';
   const badge = '<a href="' + url + '" target="_blank" rel="noopener" style="position:fixed;right:12px;bottom:12px;z-index:2147483647;display:flex;align-items:center;gap:6px;background:#3182f6;color:#fff;font:700 12px/1 Pretendard,-apple-system,sans-serif;padding:9px 13px;border-radius:999px;text-decoration:none;box-shadow:0 4px 14px rgba(0,0,0,.18)">⚡ 말로로 만들었어요</a>';
   if(/<\/body>/i.test(html)) return html.replace(/<\/body>/i, badge + '</body>');
   return html + badge;
@@ -446,41 +399,39 @@ window.addEventListener('message', (e)=>{
   if(d && d.__mallo === 'ai'){ handleAiRequest(e.source, d.id, d.prompt); return; }
   if(!(d && d.__mallo === 'data' && d.data)) return;
   S.toolData = d.data;
-  // 공유 링크로 연 다른 사람: 내 기기 로컬에만 저장(소유자 데이터는 안 건드림)
-  if(S.viewerId && !S.viewerOwner){ try{ localStorage.setItem('mallo_tool_' + S.viewerId, JSON.stringify(d.data)); }catch(e){} return; }
-  scheduleSaveData();   // 소유자/빌더: 클라우드 자동 저장
+  if(S.currentToolId && S.session){
+    // 너무 자주 쓰지 않도록 살짝 debounce
+    clearTimeout(S._saveTimer);
+    S._saveTimer = setTimeout(()=>{
+      S.supabase.from('tools').update({ data:S.toolData, updated_at:new Date().toISOString() }).eq('id', S.currentToolId);
+    }, 500);
+  } else if(S.viewerId && !S.viewerOwner){
+    try{ localStorage.setItem('mallo_tool_' + S.viewerId, JSON.stringify(S.toolData)); }catch(e){}
+  }
 });
-// 도구가 요청한 AI 호출을 중계: 로그인 토큰으로 /api/ai 호출 후 결과를 도구로 회신(키는 절대 도구로 안 감)
-async function handleAiRequest(src, id, prompt){
-  const reply = (payload)=>{ try{ src && src.postMessage(Object.assign({ __mallo:'ai-result', id }, payload), '*'); }catch(e){} };
-  if(!prompt || !String(prompt).trim()){ reply({ error:'내용을 입력해 주세요' }); return; }
-  if(!S.session){ reply({ error:'AI 기능은 로그인 후 사용할 수 있어요' }); return; }
+async function handleAiRequest(source, id, prompt){
   try{
+    if(!S.session) throw new Error('로그인이 필요해요');
     const res = await fetch('/api/ai', {
-      method:'POST',
-      headers:{ 'content-type':'application/json', authorization:`Bearer ${S.session.access_token}` },
-      body: JSON.stringify({ prompt: String(prompt).slice(0, 12000) }),
+      method:'POST', headers:{'content-type':'application/json', authorization:`Bearer ${S.session.access_token}`},
+      body: JSON.stringify({ prompt })
     });
-    const j = await res.json().catch(()=>({}));
-    if(!res.ok){ reply({ error: j.error || 'AI 처리에 실패했어요' }); return; }
-    reply({ text: j.text || '' });
-  }catch(e){ reply({ error:'AI 연결에 실패했어요' }); }
+    const j = await res.json();
+    source.postMessage({__mallo:'ai_result', id, text:j.text||'', error:j.error||null}, '*');
+  }catch(e){ source.postMessage({__mallo:'ai_result', id, error:e.message||'AI 호출 실패'}, '*'); }
 }
-let _saveTimer = null;
-function scheduleSaveData(){ clearTimeout(_saveTimer); _saveTimer = setTimeout(persistData, 1200); }
-async function persistData(){
-  if(!S.currentToolId || !S.session || !S.supabase) return;
-  try{ await S.supabase.from('tools').update({ data: S.toolData || {}, updated_at: new Date().toISOString() }).eq('id', S.currentToolId); }catch(e){}
-}
-async function saveCurrentTool(promptText){
-  if(!S.session || !S.code || !S.supabase) return;
+async function saveCurrentTool(prompt){
+  if(!S.session || !S.code) return;
+  let title = '내 도구';
+  const m = S.code.match(/<title[^>]*>([^<]+)<\/title>/i);
+  if(m) title = m[1].trim().slice(0,50);
+  else title = (prompt || '내 도구').replace(/만들어줘|프로그램|앱/g,'').trim().slice(0,30) || '내 도구';
   try{
     if(S.currentToolId){
-      await S.supabase.from('tools').update({ html: S.code, data: S.toolData || {}, updated_at: new Date().toISOString() }).eq('id', S.currentToolId);
+      await S.supabase.from('tools').update({ title, html:S.code, data:S.toolData||{}, updated_at:new Date().toISOString() }).eq('id', S.currentToolId);
     } else {
-      const title = ((promptText || '내 도구').replace(/\s+/g,' ').trim().slice(0,24)) || '내 도구';
-      const { data, error } = await S.supabase.from('tools').insert({ user_id: S.session.user.id, title, html: S.code, data: S.toolData || {} }).select('id').single();
-      if(!error && data){ S.currentToolId = data.id; toast('내 도구함에 저장됐어요 📂'); }
+      const { data, error } = await S.supabase.from('tools').insert({ user_id:S.session.user.id, title, html:S.code, data:S.toolData||{} }).select('id').single();
+      if(!error && data) S.currentToolId = data.id;
     }
   }catch(e){}
   if(S.currentToolId) $('btnInstallApp').classList.remove('hidden');   // 만들면 바로 '앱으로 설치' 노출
@@ -651,8 +602,10 @@ $('btnKakao').onclick = ()=> S.supabase.auth.signInWithOAuth({
 });
 $('btnLogout').onclick = async ()=>{ await S.supabase.auth.signOut(); location.reload(); };
 
-/* ================== 결제(포트원 · 카카오페이 단건결제 · 이용권 충전) ================== */
-// 모달에 이용권 카드 렌더링
+/* ================== 결제(포트원 · 카카오페이 단건결제 · 프로그램 생성권 충전) ================== */
+function packOrderName(pack){ return '말로 프로그램 생성권 ' + (pack.credits || 0) + '건'; }
+
+// 모달에 생성권 카드 렌더링
 function renderPlans(){
   const box = $('planBox'); if(!box) return;
   const packs = (S.cfg && S.cfg.plans) || {};
@@ -662,7 +615,7 @@ function renderPlans(){
     b.className = 'plan' + (id === 'standard' ? ' best' : '');
     const badge = id === 'standard' ? '<span class="badge">인기</span>' : '';
     const per = p.credits ? Math.round(p.price / p.credits) : p.price;
-    b.innerHTML = '<div><div class="pn">'+p.name+badge+'</div><div class="pd">'+p.credits+'회 이용권 · 회당 '+per.toLocaleString()+'원 · 만료 없음</div></div><div class="pv">'+p.price.toLocaleString()+'원</div>';
+    b.innerHTML = '<div><div class="pn">'+p.name+badge+'</div><div class="pd">'+p.credits+'건 생성권 · 건당 '+per.toLocaleString()+'원 · 만료 없음</div></div><div class="pv">'+p.price.toLocaleString()+'원</div>';
     b.onclick = ()=> startPurchase(id);
     box.appendChild(b);
   });
@@ -672,22 +625,27 @@ async function startPurchase(packId){
   if(!S.session){ toast('로그인이 필요해요'); return; }
   if(!window.PortOne){ toast('결제 모듈을 불러오는 중이에요. 잠시 후 다시 눌러주세요'); return; }
   if(S.payBusy) return; S.payBusy = true;
-  const pack = (S.cfg.plans && S.cfg.plans[packId]) || {};
+  const pack = (S.cfg.plans && S.cfg.plans[packId]) || null;
+  if(!pack || !pack.price || !pack.credits){ toast('상품 정보를 확인하지 못했어요'); S.payBusy = false; return; }
   const paymentId = `mallo-${S.session.user.id}-${Date.now()}`;
+  const orderName = packOrderName(pack);
   try{
     try{ localStorage.setItem('mallo_pack', packId); localStorage.setItem('mallo_pid', paymentId); }catch(e){}  // 모바일 복귀용
     const rsp = await PortOne.requestPayment({
       storeId: S.cfg.payStoreId,
       channelKey: S.cfg.payChannelKey,
       paymentId,
-      orderName: '말로 이용권 ' + (pack.name || '') + ' (' + (pack.credits||'') + '회)',
+      orderName,
       totalAmount: pack.price,
       currency: 'CURRENCY_KRW',
       payMethod: 'EASY_PAY',
-      customer: { customerId: S.session.user.id, email: S.session.user.email },
+      customer: { customerId: S.session.user.id, email: S.session.user.email || undefined },
+      products: [{ id: packId, name: orderName, amount: pack.price, quantity: 1, tag: 'mallo-generation-pack' }],
+      productType: 'DIGITAL',
+      customData: { packId, userId: S.session.user.id, credits: pack.credits },
       redirectUrl: location.origin + '/?pay=return',   // 모바일에서 카카오페이 후 복귀
     });
-    if(!rsp || rsp.code != null){ toast('결제가 취소됐어요'); return; }   // 데스크톱(팝업) 경로
+    if(!rsp || rsp.code != null){ toast(rsp && rsp.message ? rsp.message : '결제가 취소됐어요'); return; }   // 데스크톱(팝업) 경로
     await confirmPurchase(rsp.paymentId || paymentId, packId);
   }catch(e){ toast('결제 중 문제가 생겼어요. 잠시 후 다시 시도해 주세요'); }
   finally{ S.payBusy = false; }
@@ -699,23 +657,30 @@ async function confirmPurchase(paymentId, packId){
     headers:{ 'content-type':'application/json', authorization:`Bearer ${S.session.access_token}` },
     body: JSON.stringify({ paymentId, packId })
   });
-  if(!res.ok){ toast('결제 확인에 실패했어요. 잠시 후 다시 확인해 주세요'); return; }
+  if(!res.ok){
+    const err = await res.json().catch(()=>({}));
+    toast(err.error || '결제 확인에 실패했어요. 잠시 후 다시 확인해 주세요');
+    return;
+  }
+  const result = await res.json().catch(()=>({}));
   track('purchase', { pack: packId });
   try{ localStorage.removeItem('mallo_pack'); localStorage.removeItem('mallo_pid'); }catch(e){}
   $('fbModal').classList.add('hidden');
   await refreshMe();
-  toast('충전 완료! 이제 계속 만들 수 있어요 🎉');
+  const added = Number(result.credits_added || 0);
+  toast(added ? added+'건 충전 완료! 이제 프로그램을 만들 수 있어요 🎉' : '충전 확인 완료!');
 }
 // 모바일: 카카오페이 결제 후 redirectUrl 로 돌아왔을 때 처리
 function handlePayReturn(){
   const q = new URLSearchParams(location.search);
   if(q.get('pay') !== 'return') return;
   let pid = q.get('paymentId');
-  let packId = 'light';
-  try{ pid = pid || localStorage.getItem('mallo_pid'); packId = localStorage.getItem('mallo_pack') || 'light'; }catch(e){}
+  let packId = q.get('packId') || 'single';
+  try{ pid = pid || localStorage.getItem('mallo_pid'); packId = localStorage.getItem('mallo_pack') || packId; }catch(e){}
   history.replaceState({}, '', location.origin + location.pathname);
-  if(q.get('code')){ toast('결제가 취소됐어요'); return; }
+  if(q.get('code')){ toast(q.get('message') || '결제가 취소됐어요'); return; }
   if(pid && S.session){ confirmPurchase(pid, packId); }
+  else { toast('결제 확인을 위해 다시 로그인해 주세요'); }
 }
 
 /* ================== 생성 플로우 ================== */
@@ -948,7 +913,7 @@ function openFeedback(beta){
   if(beta){
     if(payOn){
       $('fbTitle').textContent = '무료 횟수를 다 쓰셨어요 🎉';
-      $('fbSub').textContent = '이용권을 충전하면 계속 만들 수 있어요. 카카오페이로 한 번만 결제하면 끝, 구매한 횟수는 만료 없이 계속 쓸 수 있어요.';
+      $('fbSub').textContent = '생성권을 충전하면 계속 만들 수 있어요. 카카오페이로 한 번만 결제하면 끝, 구매한 생성권은 만료 없이 계속 쓸 수 있어요.';
     } else {
       $('fbTitle').textContent = '무료 체험 3회가 끝났어요 🧪';
       $('fbSub').textContent = '말로는 아직 베타 테스트 버전이에요. 지금은 결제 없이 준비 중이고, 정식 오픈하면 알려드릴게요. 써보신 후기를 남겨 주시면 큰 힘이 됩니다!';
