@@ -3,7 +3,7 @@
 -- Supabase 대시보드 → SQL Editor 에 붙여넣고 Run
 -- ============================================
 
--- 사용자 프로필 (체험/구독/사용량)
+-- 사용자 프로필 (무료 체험/이용권/사용량)
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   email text,
@@ -12,6 +12,12 @@ create table if not exists public.profiles (
   usage_month text not null default to_char(now(), 'YYYY-MM'),
   usage_count int not null default 0
 );
+
+alter table public.profiles add column if not exists credits int not null default 0;              -- 만료 없는 잔여 이용권
+alter table public.profiles add column if not exists unlimited boolean not null default false;    -- 운영자/마스터 계정
+alter table public.profiles add column if not exists last_generated_at timestamptz;              -- 쿨다운용
+alter table public.profiles add column if not exists daily_usage_date date not null default current_date;
+alter table public.profiles add column if not exists daily_usage_count int not null default 0;
 
 alter table public.profiles enable row level security;
 
@@ -24,7 +30,7 @@ create or replace function public.handle_new_user()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
   insert into public.profiles (id, email) values (new.id, new.email)
-  on conflict (id) do nothing;
+  on conflict (id) do update set email = coalesce(public.profiles.email, excluded.email);
   return new;
 end $$;
 
@@ -33,41 +39,142 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
 
--- 생성 1회 사용 처리 (체험/구독/월간한도 검사 + 카운트 증가, 원자적)
-create or replace function public.use_generation(uid uuid, monthly_limit int, trial_minutes int)
+-- 이용권 구매 기록: payment_id 기준 멱등 처리. 환불 시 미사용분 계산 근거로 사용.
+create table if not exists public.credit_purchases (
+  payment_id text primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  pack text not null,
+  credits int not null,
+  amount int not null,
+  refunded_credits int not null default 0,
+  refunded_amount int not null default 0,
+  created_at timestamptz not null default now()
+);
+
+alter table public.credit_purchases enable row level security;
+drop policy if exists "own credit purchases read" on public.credit_purchases;
+create policy "own credit purchases read" on public.credit_purchases
+  for select using (auth.uid() = user_id);
+
+-- 결제 성공 후 이용권 충전(멱등)
+create or replace function public.add_credits(uid uuid, p_payment_id text, p_pack text, p_credits int, p_amount int)
+returns json language plpgsql security definer set search_path = public as $$
+declare
+  inserted_count int := 0;
+  balance int := 0;
+begin
+  insert into public.profiles (id) values (uid) on conflict (id) do nothing;
+
+  insert into public.credit_purchases (payment_id, user_id, pack, credits, amount)
+  values (p_payment_id, uid, p_pack, p_credits, p_amount)
+  on conflict (payment_id) do nothing;
+  get diagnostics inserted_count = row_count;
+
+  if inserted_count > 0 then
+    update public.profiles
+      set credits = credits + p_credits
+      where id = uid
+      returning credits into balance;
+  else
+    select credits into balance from public.profiles where id = uid;
+  end if;
+
+  return json_build_object('added', inserted_count > 0, 'credits', coalesce(balance, 0));
+end $$;
+
+-- 생성 1회 사용 처리: 무료 체험 3회 후 만료 없는 크레딧을 1회씩 차감.
+drop function if exists public.use_generation(uuid, int, int);
+drop function if exists public.use_generation(uuid, int, int, int, int);
+create or replace function public.use_generation(
+  uid uuid,
+  monthly_limit int,
+  trial_minutes int,
+  p_cooldown_sec int default 0,
+  p_daily_cap int default 0
+)
 returns json language plpgsql security definer set search_path = public as $$
 declare
   p public.profiles;
-  cur text := to_char(now(), 'YYYY-MM');
+  now_ts timestamptz := now();
 begin
   insert into public.profiles (id) values (uid) on conflict (id) do nothing;
   select * into p from public.profiles where id = uid for update;
 
-  -- 마스터(무제한)
+  if p.daily_usage_date is distinct from current_date then
+    p.daily_usage_date := current_date;
+    p.daily_usage_count := 0;
+    update public.profiles set daily_usage_date = current_date, daily_usage_count = 0 where id = uid;
+  end if;
+
+  if p_cooldown_sec > 0 and p.last_generated_at is not null and p.last_generated_at > now_ts - make_interval(secs => p_cooldown_sec) then
+    return json_build_object('allowed', false, 'reason', 'cooldown');
+  end if;
+
+  if p_daily_cap > 0 and p.daily_usage_count >= p_daily_cap then
+    return json_build_object('allowed', false, 'reason', 'busy');
+  end if;
+
+  -- 마스터(무제한): 차감 없이 허용
   if p.unlimited then
-    update public.profiles set usage_count = p.usage_count + 1 where id = uid;
-    return json_build_object('allowed', true, 'remaining', 999999);
+    update public.profiles set
+      usage_count = usage_count + 1,
+      daily_usage_count = daily_usage_count + 1,
+      last_generated_at = now_ts
+    where id = uid;
+    return json_build_object('allowed', true, 'remaining', 999999, 'source', 'unlimited');
   end if;
 
-  -- 구독자(유효 기간 내): 본인 플랜 월 한도 (월 바뀌면 리셋)
-  if p.subscribed and (p.sub_until is null or p.sub_until > now()) then
-    if p.usage_month <> cur then
-      update public.profiles set usage_month = cur, usage_count = 0 where id = uid;
-      p.usage_count := 0;
-    end if;
-    if p.usage_count >= coalesce(p.monthly_limit, monthly_limit) then
-      return json_build_object('allowed', false, 'reason', 'limit');
-    end if;
-    update public.profiles set usage_count = p.usage_count + 1 where id = uid;
-    return json_build_object('allowed', true, 'remaining', coalesce(p.monthly_limit, monthly_limit) - p.usage_count - 1);
+  -- 무료 체험: 평생 trial_minutes(=무료 생성 횟수)회
+  if p.usage_count < trial_minutes then
+    update public.profiles set
+      usage_count = usage_count + 1,
+      daily_usage_count = daily_usage_count + 1,
+      last_generated_at = now_ts
+    where id = uid;
+    return json_build_object('allowed', true, 'remaining', (trial_minutes - p.usage_count - 1) + p.credits, 'source', 'trial');
   end if;
 
-  -- 베타 무료 체험: 평생 trial_minutes(=무료 생성 횟수)회, 월 리셋 없음
-  if p.usage_count >= trial_minutes then
-    return json_build_object('allowed', false, 'reason', 'trial_over');
+  -- 유료 이용권: 만료 없이 1회씩 차감
+  if p.credits > 0 then
+    update public.profiles set
+      credits = credits - 1,
+      daily_usage_count = daily_usage_count + 1,
+      last_generated_at = now_ts
+    where id = uid;
+    return json_build_object('allowed', true, 'remaining', p.credits - 1, 'source', 'credit');
   end if;
-  update public.profiles set usage_count = p.usage_count + 1 where id = uid;
-  return json_build_object('allowed', true, 'remaining', trial_minutes - p.usage_count - 1);
+
+  return json_build_object('allowed', false, 'reason', 'no_credit');
+end $$;
+
+-- 생성 실패 시 차감 복구. /api/generate가 업스트림 오류·스트림 실패·빈 응답을 감지하면 호출.
+create or replace function public.restore_generation(uid uuid, p_source text default null)
+returns json language plpgsql security definer set search_path = public as $$
+declare
+  p public.profiles;
+begin
+  select * into p from public.profiles where id = uid for update;
+  if not found then
+    return json_build_object('restored', false, 'reason', 'profile_not_found');
+  end if;
+
+  if p_source = 'credit' then
+    update public.profiles set
+      credits = credits + 1,
+      daily_usage_count = greatest(daily_usage_count - 1, 0),
+      last_generated_at = null
+    where id = uid;
+    return json_build_object('restored', true, 'source', 'credit');
+  elsif p_source = 'trial' then
+    update public.profiles set
+      usage_count = greatest(usage_count - 1, 0),
+      daily_usage_count = greatest(daily_usage_count - 1, 0),
+      last_generated_at = null
+    where id = uid;
+    return json_build_object('restored', true, 'source', 'trial');
+  end if;
+
+  return json_build_object('restored', false, 'source', coalesce(p_source, 'unknown'));
 end $$;
 
 -- 사용자 피드백/후기
@@ -82,50 +189,6 @@ create table if not exists public.feedback (
 
 alter table public.feedback enable row level security;
 -- 공개 정책 없음: API(service_role)만 기록·조회. 피드백 열람은 Supabase 대시보드 Table Editor에서.
-
--- ============================================
--- 결제(포트원 정기결제) 지원
--- ============================================
-alter table public.profiles add column if not exists billing_key text;     -- 카카오페이 빌링키(자동결제용)
-alter table public.profiles add column if not exists sub_until timestamptz;  -- 구독 만료 시각
-alter table public.profiles add column if not exists plan text;              -- 플랜 id (light/standard/pro)
-alter table public.profiles add column if not exists plan_price int;         -- 월 결제 금액(원)
-alter table public.profiles add column if not exists monthly_limit int;      -- 플랜별 월 생성 한도
-
--- 구독 활성화/연장 (결제 성공 시 호출) — 플랜·가격·월 한도 저장
-drop function if exists public.activate_subscription(uuid, text, int);
-create or replace function public.activate_subscription(uid uuid, p_billing_key text, p_days int, p_price int, p_limit int, p_plan text)
-returns void language plpgsql security definer set search_path = public as $$
-begin
-  insert into public.profiles (id) values (uid) on conflict (id) do nothing;
-  update public.profiles set
-    subscribed = true,
-    billing_key = coalesce(p_billing_key, billing_key),
-    plan = coalesce(p_plan, plan),
-    plan_price = coalesce(p_price, plan_price),
-    monthly_limit = coalesce(p_limit, monthly_limit),
-    sub_until = greatest(coalesce(sub_until, now()), now()) + make_interval(days => p_days),
-    usage_month = to_char(now(), 'YYYY-MM'),
-    usage_count = 0
-  where id = uid;
-end $$;
-
--- 구독 해지 (결제 실패/취소 시)
-create or replace function public.cancel_subscription(uid uuid)
-returns void language plpgsql security definer set search_path = public as $$
-begin
-  update public.profiles set subscribed = false, billing_key = null where id = uid;
-end $$;
-
--- 결제일 도래 구독자 목록 (자동결제 크론용)
-drop function if exists public.due_subscriptions(int);
-create or replace function public.due_subscriptions(grace int)
-returns table(id uuid, email text, billing_key text, plan_price int, plan text, monthly_limit int)
-language sql security definer set search_path = public as $$
-  select id, email, billing_key, plan_price, plan, monthly_limit from public.profiles
-  where subscribed = true and billing_key is not null
-    and sub_until is not null and sub_until <= now() + make_interval(days => grace);
-$$;
 
 -- ============================================
 -- 내 도구함 (사용자가 만든 도구 + 입력 데이터 저장)
