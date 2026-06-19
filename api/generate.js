@@ -222,6 +222,23 @@ function buildUserPrompt(prompt, code, refinedPrompt) {
   return `사용자 원문 요청: ${prompt}${hiddenRefine}`;
 }
 
+async function restoreGeneration(uid, quota) {
+  const source = quota?.source || null;
+  if (!source || source === 'unlimited') return;
+  try {
+    const res = await sb('rpc/restore_generation', {
+      method: 'POST',
+      body: JSON.stringify({ uid, p_source: source }),
+    });
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '');
+      console.error('[generate] restore failed', res.status, detail.slice(0, 300));
+    }
+  } catch (e) {
+    console.error('[generate] restore error', e?.message || e);
+  }
+}
+
 export default async function handler(req) {
   if (req.method !== 'POST') return json({ error: '허용되지 않은 요청이에요' }, 405);
 
@@ -245,7 +262,7 @@ export default async function handler(req) {
       monthly_limit: Number(env('MONTHLY_LIMIT', '100')),
       trial_minutes: Number(env('TRIAL_LIMIT', '3')), // 이제 '분'이 아니라 무료 체험 '횟수'
       p_cooldown_sec: Number(env('COOLDOWN_SEC', '6')),   // 어뷰징: 계정당 연속 생성 최소 간격(초)
-      p_daily_cap: Number(env('DAILY_CAP', '500')),        // 어뷰징/비용: 전체 일일 생성 상한
+      p_daily_cap: Number(env('DAILY_CAP', '500')),        // 어뷰징/비용: 일일 생성 상한
     }),
   });
   if (!rpc.ok) return json({ error: '서버 오류가 났어요. 잠시 후 다시 시도해 주세요.' }, 500);
@@ -334,13 +351,14 @@ export default async function handler(req) {
   }
 
   if (!upstream.ok) {
+    await restoreGeneration(user.id, quota);
     const detail = await upstream.text().catch(() => '');
     // 실제 업스트림 오류는 서버 로그에만 남기고, 사용자에겐 공급자/모델이 드러나지 않는 일반 문구만 노출
     console.error('[generate] upstream error', upstream.status, detail.slice(0, 500));
     const friendly =
       upstream.status === 429
-        ? '지금 사용량이 많아요. 잠시 후 다시 시도해 주세요.'
-        : '도구를 만드는 중 문제가 발생했어요. 잠시 후 다시 시도해 주세요.';
+        ? '지금 사용량이 많아요. 이용권은 차감되지 않았어요. 잠시 후 다시 시도해 주세요.'
+        : '도구를 만드는 중 문제가 발생했어요. 이용권은 차감되지 않았어요. 잠시 후 다시 시도해 주세요.';
     return json({ error: friendly }, 503);
   }
 
@@ -352,6 +370,7 @@ export default async function handler(req) {
   const stream = new ReadableStream({
     async start(controller) {
       let buf = '';
+      let sentAny = false;
       try {
         while (true) {
           const { done, value } = await reader.read();
@@ -365,13 +384,22 @@ export default async function handler(req) {
             if (!data || data === '[DONE]') continue;
             try {
               const t = extract(JSON.parse(data));
-              if (t) controller.enqueue(enc.encode(`data: ${JSON.stringify({ t })}\n\n`));
+              if (t) {
+                sentAny = true;
+                controller.enqueue(enc.encode(`data: ${JSON.stringify({ t })}\n\n`));
+              }
             } catch { /* partial json — skip */ }
           }
         }
-        controller.enqueue(enc.encode('data: [DONE]\n\n'));
+        if (!sentAny) {
+          await restoreGeneration(user.id, quota);
+          controller.enqueue(enc.encode(`data: ${JSON.stringify({ error: '생성 결과를 받지 못했어요. 이용권은 차감되지 않았어요.' })}\n\n`));
+        } else {
+          controller.enqueue(enc.encode('data: [DONE]\n\n'));
+        }
       } catch (e) {
-        controller.enqueue(enc.encode(`data: ${JSON.stringify({ error: '생성 중 연결이 끊겼어요' })}\n\n`));
+        await restoreGeneration(user.id, quota);
+        controller.enqueue(enc.encode(`data: ${JSON.stringify({ error: '생성 중 연결이 끊겼어요. 이용권은 차감되지 않았어요.' })}\n\n`));
       }
       controller.close();
     },
