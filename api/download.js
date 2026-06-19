@@ -1,99 +1,123 @@
-// POST /api/download — 생성된 HTML → OS별 Neutralino 네이티브 앱 ZIP 패키지
-// 요청: { html: string, title: string, os: "windows"|"mac-arm"|"mac-x64"|"linux" }
-// 응답: application/zip (바이너리 + resources.neu + config)
-//
-// 추가 비용 없음: 바이너리는 Vercel 정적 파일(/runtimes/)에서 로드,
-// ZIP 조립은 Edge Function에서 처리 (기존 Vercel 무료 플랜 범위 내)
-
+// api/download.js — Neutralino 네이티브 앱 패키저
 import { zipSync, strToU8 } from 'fflate';
-import { json, getUser } from './_lib.js';
+import { getUser } from './_lib.js';
 
 export const config = { runtime: 'edge' };
 
 const NEUTRALINO_VERSION = 'v6.8.0';
 
 const BINARY_INFO = {
-  windows:  { file: 'neutralino-win_x64.exe', exeName: 'app.exe'  },
-  'mac-arm':{ file: 'neutralino-mac_arm64',   exeName: 'app'      },
-  'mac-x64':{ file: 'neutralino-mac_x64',     exeName: 'app'      },
-  linux:    { file: 'neutralino-linux_x64',   exeName: 'app'      },
+  windows:   { file: 'neutralino-win_x64.exe',  exeName: 'app.exe' },
+  'mac-arm': { file: 'neutralino-mac_arm64',     exeName: 'app'     },
+  'mac-x64': { file: 'neutralino-mac_x64',       exeName: 'app'     },
+  linux:     { file: 'neutralino-linux_x64',     exeName: 'app'     },
 };
 
 export default async function handler(req) {
-  if (req.method !== 'POST') return json({ error: '허용되지 않은 요청이에요' }, 405);
+  if (req.method !== 'POST')
+    return new Response('Method not allowed', { status: 405 });
 
   const user = await getUser(req);
-  if (!user) return json({ error: '로그인이 필요해요' }, 401);
+  if (!user)
+    return new Response(JSON.stringify({ error: '로그인이 필요해요' }),
+      { status: 401, headers: { 'Content-Type': 'application/json' } });
 
-  let body;
-  try { body = await req.json(); } catch { return json({ error: '요청 형식이 잘못됐어요' }, 400); }
+  let html, title, os;
+  try { ({ html, title, os } = await req.json()); }
+  catch { return new Response(JSON.stringify({ error: '잘못된 요청' }),
+    { status: 400, headers: { 'Content-Type': 'application/json' } }); }
 
-  const { html, title = '내 도구', os = 'windows' } = body || {};
-  if (!html || typeof html !== 'string') return json({ error: 'HTML 내용이 없어요' }, 400);
+  if (!html)
+    return new Response(JSON.stringify({ error: '앱 코드가 없어요' }),
+      { status: 400, headers: { 'Content-Type': 'application/json' } });
+  if (!BINARY_INFO[os])
+    return new Response(JSON.stringify({ error: '지원하지 않는 OS' }),
+      { status: 400, headers: { 'Content-Type': 'application/json' } });
 
   const info = BINARY_INFO[os];
-  if (!info) return json({ error: '지원하지 않는 OS예요' }, 400);
 
-  const host = req.headers.get('host') || '';
-  const proto = host.startsWith('localhost') ? 'http' : 'https';
-  const binaryUrl = `${proto}://${host}/runtimes/${info.file}`;
+  // 바이너리 가져오기
+  const host = req.headers.get('host') || 'mallo-alpha.vercel.app';
+  const binaryRes = await fetch(`https://${host}/runtimes/${info.file}`);
+  if (!binaryRes.ok)
+    return new Response(JSON.stringify({
+      error: `런타임 파일을 찾을 수 없어요 (${info.file}). GitHub에 올린 뒤 Vercel 재배포가 필요해요.`
+    }), { status: 500, headers: { 'Content-Type': 'application/json' } });
 
-  let binBytes;
-  try {
-    const bRes = await fetch(binaryUrl);
-    if (!bRes.ok) {
-      return json({
-        error: `런타임 파일을 찾을 수 없어요 (${info.file}). GitHub에 올린 뒤 Vercel 재배포가 필요해요.`,
-        hint: 'npm run setup 후 git push 하세요',
-      }, 500);
-    }
-    binBytes = new Uint8Array(await bRes.arrayBuffer());
-  } catch (e) {
-    return json({ error: '런타임 로드 중 오류가 났어요' }, 500);
-  }
+  const binBytes = new Uint8Array(await binaryRes.arrayBuffer());
+  const exeName  = info.exeName;
+  const safeTitle = (title || '내 도구').replace(/[<>:"/\\|?*]/g, '_').substring(0, 30);
 
-  const resourcesNeu = zipSync({ 'index.html': strToU8(html) });
-
-  const safeTitle = String(title || '내 도구').replace(/[<>"'&]/g, '').slice(0, 60) || '내 도구';
+  // Neutralino 설정 — resources/ 폴더 방식 (resources.neu 불필요)
   const configJson = JSON.stringify({
-    applicationId: 'app.mallo.tool',
+    applicationId: 'kr.mallo.app',
     version: '1.0.0',
     defaultMode: 'window',
     documentRoot: '/',
-    url: '/index.html',
+    url: '/',
     enableServer: true,
-    enableNativeAPI: false,
-    nativeBlockList: ['*'],
-    logging: { enabled: false },
-    window: { title: safeTitle, width: 1280, height: 800, resizable: true },
-    modes: { window: { title: safeTitle, width: 1280, height: 800, resizable: true } },
-    cli: { binaryName: 'app', resourcesPath: '/', defaultMode: 'window' },
+    enableNativeAPI: true,
+    modes: {
+      window: {
+        title: safeTitle,
+        width: 1280,
+        height: 800,
+        minWidth: 800,
+        minHeight: 600,
+        center: true,
+        fullScreen: false,
+        alwaysOnTop: false,
+        enableInspector: false,
+      }
+    },
+    cli: {
+      binaryVersion: NEUTRALINO_VERSION.replace('v', ''),
+      clientVersion: '5.5.0',
+      resourcesPath: '/resources/',
+    },
+    globalVariables: {}
   }, null, 2);
 
-  const { exeName } = info;
-  const readme = os === 'windows'
-    ? ['[말로 앱 실행 방법 — Windows]', '', '1. 이 폴더를 원하는 곳에 놓으세요.', `2. "${exeName}" 을 더블클릭하세요.`, '3. "Windows의 PC 보호" 경고 → 추가 정보 → 그래도 실행.', '', `※ 세 파일(${exeName}, resources.neu, neutralino.config.json)이 같은 폴더에 있어야 합니다.`, '', `Neutralino Runtime: ${NEUTRALINO_VERSION}`, '만든 곳: 말로(mallo.app)'].join('\n')
-    : os.startsWith('mac')
-    ? ['[말로 앱 실행 방법 — macOS]', '', '1. 이 폴더를 원하는 곳에 놓으세요.', `2. chmod +x ${exeName} && ./${exeName}`, '   또는 Finder에서 우클릭 → 열기.', '', `※ 세 파일(${exeName}, resources.neu, neutralino.config.json)이 같은 폴더에 있어야 합니다.`, `Neutralino Runtime: ${NEUTRALINO_VERSION}`, '만든 곳: 말로(mallo.app)'].join('\n')
-    : ['[말로 앱 실행 방법 — Linux]', '', `chmod +x ${exeName} && ./${exeName}`, '', '※ WebKitGTK 필요: sudo apt install libwebkit2gtk-4.0-37', `Neutralino Runtime: ${NEUTRALINO_VERSION}`, '만든 곳: 말로(mallo.app)'].join('\n');
+  const osLabel = {
+    windows:   'Windows',
+    'mac-arm': 'Mac-AppleSilicon',
+    'mac-x64': 'Mac-Intel',
+    linux:     'Linux',
+  }[os];
 
+  const macNote = (os === 'mac-arm' || os === 'mac-x64')
+    ? '\n  ⚠  처음 실행 시: 우클릭 → "열기" 선택 (보안 경고 우회)'
+    : os === 'linux'
+    ? '\n  chmod +x ' + exeName + ' 으로 실행 권한 부여 후 ./app 으로 실행'
+    : '';
+
+  const readme = `말로 네이티브 앱 — ${safeTitle}
+
+📂 이 폴더 안의 파일
+  ${exeName}               ← 실행파일 (더블클릭)${macNote}
+  resources/index.html     ← 앱 소스 (수정 가능)
+  neutralino.config.json   ← 설정 (건드리지 마세요)
+
+▶ 실행 방법
+  ${exeName} 파일을 더블클릭하면 바로 실행됩니다.
+
+Powered by 말로 (mallo-alpha.vercel.app) & Neutralino.js ${NEUTRALINO_VERSION}
+`;
+
+  // ZIP 조립: 바이너리 + resources/index.html (파일시스템 모드)
   const zipOut = zipSync({
-    [exeName]:                 [binBytes,        { level: 0 }],
-    'resources.neu':           [resourcesNeu,    { level: 0 }],
-    'neutralino.config.json':  strToU8(configJson),
-    '실행방법.txt':             strToU8(readme),
+    [exeName]:                  [binBytes,            { level: 0 }],
+    'resources/index.html':     [strToU8(html),       { level: 6 }],
+    'neutralino.config.json':   [strToU8(configJson), { level: 9 }],
+    '실행방법.txt':              [strToU8(readme),     { level: 9 }],
   });
 
-  const safeName = safeTitle.replace(/\s+/g, '-').replace(/[^\w가-힣-]/g, '') || 'app';
-  const filename = `말로-${safeName}-${os}.zip`;
-
+  const filename = encodeURIComponent(`말로-${safeTitle}-${osLabel}.zip`);
   return new Response(zipOut, {
     status: 200,
     headers: {
       'Content-Type': 'application/zip',
-      'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
-      'Content-Length': String(zipOut.byteLength),
-      'Cache-Control': 'no-store',
+      'Content-Disposition': `attachment; filename*=UTF-8''${filename}`,
     },
   });
 }
