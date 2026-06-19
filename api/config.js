@@ -11,6 +11,6 @@ export default async function handler() {
     // 포트원(PortOne) 결제 — 아래 값이 모두 채워지면 결제 버튼이 자동으로 켜져요(키 없으면 베타 모드 유지)
     payStoreId: env('PORTONE_STORE_ID', ''),       // 공개용 스토어 ID
     payChannelKey: env('PORTONE_CHANNEL_KEY', ''), // 카카오페이 채널 키(공개용)
-    plans: PLANS,                                  // 만료 없는 이용권 팩(가격·횟수)
+    plans: PLANS,                                  // 만료 없는 프로그램 생성권 팩(가격·건수)
   });
 }
