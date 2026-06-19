@@ -1,5 +1,5 @@
 {
-  "buildCommand": "node scripts/patch-index.js",
+  "buildCommand": "node scripts/patch-index.js && node scripts/download-runtimes.js"
   "outputDirectory": ".",
   "redirects": [
     {
