@@ -330,20 +330,28 @@
 <div class="overlay hidden" id="dlModal">
   <div class="modal">
     <h2 style="font-size:20px;font-weight:800;margin:0 0 4px">어떤 컴퓨터에서 쓰실 건가요?</h2>
-    <p class="sub" style="margin:0 0 16px">선택한 OS용 실행파일 하나로 받아, 더블클릭하면 바로 실행돼요.</p>
-    <div class="planbox">
-      <button class="plan dlos" data-os="windows" style="opacity:.65">
-        <div><div class="pn">🪟 Windows용 <span class="badge" style="background:#8b95a1">베타 준비중</span></div><div class="pd">.exe 실행파일 하나 · 설치 없이 바로 실행</div></div>
-        <div class="pv">유료</div>
+    <p class="sub" style="margin:0 0 16px">ZIP 파일 받아 압축 풀고 더블클릭하면 바로 실행돼요. 설치 없이 사용 가능.</p>
+    <div class="planbox" id="dlOsBox">
+      <button class="plan dlos" data-os="windows">
+        <div><div class="pn">🪟 Windows</div><div class="pd">.exe 실행파일 · Windows 10/11 · 설치 불필요</div></div>
+        <div class="pv" style="font-size:13px;color:var(--green);font-weight:700">무료</div>
       </button>
-      <button class="plan dlos" data-os="mac" style="opacity:.65">
-        <div><div class="pn">🍎 Mac용 <span class="badge" style="background:#8b95a1">베타 준비중</span></div><div class="pd">앱 파일 하나 · 더블클릭 실행</div></div>
-        <div class="pv">유료</div>
+      <button class="plan dlos" data-os="mac-arm">
+        <div><div class="pn">🍎 Mac (Apple Silicon)</div><div class="pd">M1/M2/M3/M4 칩 · macOS 11+</div></div>
+        <div class="pv" style="font-size:13px;color:var(--green);font-weight:700">무료</div>
       </button>
-      <button class="plan dlos" data-os="linux" style="opacity:.65">
-        <div><div class="pn">🐧 Linux용 <span class="badge" style="background:#8b95a1">베타 준비중</span></div><div class="pd">실행파일 하나 · 바로 실행</div></div>
-        <div class="pv">유료</div>
+      <button class="plan dlos" data-os="mac-x64">
+        <div><div class="pn">🍎 Mac (Intel)</div><div class="pd">Intel 칩 · macOS 10.15+</div></div>
+        <div class="pv" style="font-size:13px;color:var(--green);font-weight:700">무료</div>
       </button>
+      <button class="plan dlos" data-os="linux">
+        <div><div class="pn">🐧 Linux</div><div class="pd">x64 · Ubuntu 20.04+ / Debian</div></div>
+        <div class="pv" style="font-size:13px;color:var(--green);font-weight:700">무료</div>
+      </button>
+    </div>
+    <div id="dlProgress" style="display:none;text-align:center;padding:16px 0">
+      <div class="dots" style="font-size:15px;color:var(--sub)">패키지 만드는 중<span class="dots-anim"></span></div>
+      <p style="font-size:13px;color:var(--sub);margin-top:6px">잠시만요, 곧 다운로드가 시작돼요</p>
     </div>
     <button class="bigbtn gray" id="dlClose" style="margin-top:14px">닫기</button>
   </div>
@@ -855,17 +863,77 @@ $('btnInstallApp').onclick = ()=>{
 
 // 내려받기 버튼 → OS 선택 모달
 $('btnDownload').onclick = ()=>{
-  if(!S.code){ toast('아직 만든 도구가 없어요'); return; }
+  if(!S.code){ toast('아직 만든 도구가 없어요. 먼저 앱을 만들어 주세요!'); return; }
   $('dlModal').classList.remove('hidden');
 };
-$('dlClose').onclick = ()=> $('dlModal').classList.add('hidden');
-$('dlModal').onclick = (e)=>{ if(e.target === $('dlModal')) $('dlModal').classList.add('hidden'); };
-// OS별 실행파일 다운로드 — 베타 준비중(잠금). 정식: OS별 단일 실행파일(Tauri/WebView 래퍼), 유료(만든 가격 마진 2배)
-const OS_NAME = { windows:'Windows', mac:'Mac', linux:'Linux' };
-document.querySelectorAll('.dlos').forEach(b=>{
-  b.onclick = ()=>{ toast((OS_NAME[b.dataset.os] || '') + '용 앱은 베타 준비중이에요. 정식 오픈 때 제공돼요 🙏'); };
-});
+$('dlClose').onclick = ()=>{
+  if($('dlProgress').style.display !== 'none') return;
+  $('dlModal').classList.add('hidden');
+};
+$('dlModal').onclick = (e)=>{
+  if(e.target === $('dlModal') && $('dlProgress').style.display === 'none')
+    $('dlModal').classList.add('hidden');
+};
 
+// OS별 Neutralino 네이티브 앱 다운로드
+document.querySelectorAll('.dlos').forEach(btn => {
+  btn.onclick = async () => {
+    const os = btn.dataset.os;
+    if(!S.code){ toast('앱을 먼저 만들어 주세요!'); return; }
+    if(!S.session){ toast('로그인이 필요해요'); return; }
+
+    $('dlOsBox').style.display = 'none';
+    $('dlProgress').style.display = 'block';
+    $('dlClose').style.display = 'none';
+
+    const reset = () => {
+      $('dlOsBox').style.display = '';
+      $('dlProgress').style.display = 'none';
+      $('dlClose').style.display = '';
+    };
+
+    try {
+      const token = S.session.access_token;
+      let title = '내 도구';
+      const tm = S.code.match(/<title[^>]*>([^<]+)<\/title>/i);
+      if(tm) title = tm[1].trim().slice(0,50);
+
+      const res = await fetch('/api/download', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ html: S.code, title, os }),
+      });
+
+      if(!res.ok){
+        const err = await res.json().catch(()=>({error:'알 수 없는 오류'}));
+        throw new Error(err.error || `서버 오류 (${res.status})`);
+      }
+
+      const blob = await res.blob();
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      const cd = res.headers.get('Content-Disposition') || '';
+      const fnMatch = cd.match(/filename\*=UTF-8''([^;]+)/i);
+      a.download = fnMatch ? decodeURIComponent(fnMatch[1]) : `말로-앱-${os}.zip`;
+      a.href = url;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(()=> URL.revokeObjectURL(url), 5000);
+
+      toast('다운로드 시작됐어요! ZIP 압축 풀고 실행파일 더블클릭하면 앱이 열려요 🎉');
+      reset();
+      $('dlModal').classList.add('hidden');
+
+    } catch(e) {
+      reset();
+      toast('다운로드 실패: ' + e.message, 'err');
+    }
+  };
+});
 /* 피드백 / 베타 안내 */
 function updateStars(){
   document.querySelectorAll('#fbStars .star').forEach(s=>{
