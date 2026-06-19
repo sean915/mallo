@@ -101,7 +101,7 @@ function pickClaudeModel(prompt, hasCode) {
   return (redo || complex || longReq) ? opus : sonnet;
 }
 
-async function callPromptRewriter(provider, apiKey, modelName, prompt, hasCode) {
+async function callPromptRewriter(provider, apiKey, modelName, prompt, hasCode, signal) {
   const task = hasCode ? '기존 앱 수정 요청' : '새 웹 도구 생성 요청';
   const userText = `작업 유형: ${task}\n사용자 원문:\n${prompt}`;
 
@@ -109,6 +109,7 @@ async function callPromptRewriter(provider, apiKey, modelName, prompt, hasCode) 
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      signal,
       body: JSON.stringify({
         model: modelName,
         max_tokens: 1400,
@@ -127,6 +128,7 @@ async function callPromptRewriter(provider, apiKey, modelName, prompt, hasCode) 
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
+      signal,
       body: JSON.stringify({
         model: modelName,
         temperature: 0.2,
@@ -147,6 +149,7 @@ async function callPromptRewriter(provider, apiKey, modelName, prompt, hasCode) 
     {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
+      signal,
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: PROMPT_REWRITE_SYSTEM }] },
         contents: [{ role: 'user', parts: [{ text: userText }] }],
@@ -195,18 +198,16 @@ async function boostPrompt(prompt, hasCode) {
       : env('BOOST_MODEL', 'gemini-2.5-flash');
   const model = env('PROMPT_REWRITE_MODEL', defaultModel);
 
+  let timer;
   try {
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), Number(env('PROMPT_REWRITE_TIMEOUT_MS', '9000')));
-    const run = callPromptRewriter(provider, apiKey, model, prompt, hasCode);
-    const text = await Promise.race([
-      run,
-      new Promise((_, reject) => ctrl.signal.addEventListener('abort', () => reject(new Error('timeout')), { once: true })),
-    ]);
-    clearTimeout(timer);
+    timer = setTimeout(() => ctrl.abort(), Number(env('PROMPT_REWRITE_TIMEOUT_MS', '9000')));
+    const text = await callPromptRewriter(provider, apiKey, model, prompt, hasCode, ctrl.signal);
     return typeof text === 'string' && text.trim() ? text.trim().slice(0, 5000) : null;
   } catch {
     return null;
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }
 
@@ -236,11 +237,7 @@ export default async function handler(req) {
     return json({ error: '요청 내용을 확인해 주세요 (최대 4000자)' }, 400);
   }
 
-  // 3. 프롬프트 정제: 사용자 원문을 서버 내부에서 제작 지시서로 바꾼 뒤 실제 생성 모델에 전달.
-  const spec = await boostPrompt(prompt, !!code);
-  const userPrompt = buildUserPrompt(prompt, code, spec);
-
-  // 4. 체험/구독/월간한도 검사 + 사용량 차감 (DB에서 원자적으로)
+  // 3. 체험/구독/월간한도 검사 + 사용량 차감 (DB에서 원자적으로)
   const rpc = await sb('rpc/use_generation', {
     method: 'POST',
     body: JSON.stringify({
@@ -264,6 +261,10 @@ export default async function handler(req) {
     const status = (code === 'cooldown' || code === 'busy') ? 429 : 402;
     return json({ error: MSG[code] || MSG.limit, code }, status);
   }
+
+  // 4. 프롬프트 정제: 사용자 원문을 서버 내부에서 제작 지시서로 바꾼 뒤 실제 생성 모델에 전달.
+  const spec = await boostPrompt(prompt, !!code);
+  const userPrompt = buildUserPrompt(prompt, code, spec);
 
   // 5. LLM 호출 (서버 환경변수의 키 사용 — 클라이언트는 모름)
   // 공급자별 요청 빌더 — 1차(유료·고품질)와 폴백(무료) 양쪽에 재사용
@@ -316,13 +317,12 @@ export default async function handler(req) {
 
   let call = buildCall(provider, key, primaryModel);
   let extract = call.extract;
-  let usedModel = primaryModel;
   let upstream = await fetch(call.url, call.options);
 
   // 잔액 부족·인증·쿼터 오류(400/401/402/403/429)면 무료 모델로 자동 폴백 → 서비스가 끊기지 않음
   // 활성화 조건: LLM_FALLBACK_API_KEY 환경변수 설정(기본 공급자 gemini, 모델 gemini-2.0-flash)
   const FALLBACK_STATUSES = [400, 401, 402, 403, 429];
-  const fbKey = env('LLM_FALLBACK_API_KEY');
+  const fbKey = env('LLM_FALLBACK_API_KEY', '');
   if (!upstream.ok && fbKey && FALLBACK_STATUSES.includes(upstream.status)) {
     const errBody = await upstream.text().catch(() => '');
     console.error('[generate] primary failed → fallback', upstream.status, errBody.slice(0, 300));
@@ -331,7 +331,6 @@ export default async function handler(req) {
     const fbCall = buildCall(fbProvider, fbKey, fbModel);
     upstream = await fetch(fbCall.url, fbCall.options);
     extract = fbCall.extract;
-    usedModel = `${fbModel}#fallback`;
   }
 
   if (!upstream.ok) {
