@@ -1,10 +1,11 @@
 // 공용 유틸 (Vercel Edge Functions)
 
 // 이용권 팩 (단일 출처) — 1회성 구매, 가격(원)/충전 횟수(credits). 만료 없음.
+// 기준가: 1회 2,900원. 10회/30회권은 할인액을 플랜명에 표시해 결제 모달에 바로 노출.
 export const PACKS = {
-  light:    { name: '라이트',   price: 9900,  credits: 10 },
-  standard: { name: '스탠다드', price: 24900, credits: 25 },
-  pro:      { name: '프로',     price: 49000, credits: 50 },
+  light:    { name: '라이트', price: 14500, credits: 5 },
+  standard: { name: '스탠다드 · 2,000원 할인', price: 27000, credits: 10 },
+  pro:      { name: '프로 · 12,000원 할인', price: 75000, credits: 30 },
 };
 // 하위호환 별칭(구 구독 코드가 참조해도 빌드 깨지지 않도록)
 export const PLANS = PACKS;
