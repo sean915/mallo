@@ -32,9 +32,56 @@ const SYSTEM_PROMPT = `당신은 한국어 요구사항을 받아 "실무에서 
 19. 사용법: \`const 결과 = await window.말로.ai("다음 회의록을 3줄로 요약해줘:\\n" + 입력텍스트);\` — 프롬프트(문자열) 하나를 받아 AI가 만든 텍스트(문자열)를 Promise로 돌려줌. 반드시 await와 try/catch로 감싸고, 호출 동안 버튼 비활성화·"AI가 처리 중…" 로딩 표시를 넣을 것.
 20. window.말로 가 없을 수도 있으니(\`if(window.말로&&window.말로.ai)\`) 방어적으로 호출하고, 없거나 실패하면 사용자에게 친절한 한국어 안내를 보여줄 것. AI 호출 결과는 그대로 화면에 예쁘게 표시.
 
-[기타]
-21. 요구사항이 모호하면 되묻지 말고, 가장 상식적이며 완성도·디자인 수준이 높은 형태로 스스로 결정해 완성할 것.
-22. 기존 코드가 주어지면 요청된 수정만 반영한 전체 코드를 다시 출력할 것(기존 디자인 품질은 유지/향상).`;
+[프롬프트 정제 결과 사용]
+21. 사용자 원문과 함께 제공되는 "내부 정제 프롬프트"가 있으면, 그것을 제품 기획서처럼 읽고 누락된 화면·필드·데이터·검증·사용 흐름을 보완해 구현할 것.
+22. 정제 프롬프트에 확인 질문이 포함되어 있더라도 최종 앱 안에 질문을 노출하지 말고, 함께 적힌 기본 가정을 사용해 즉시 완성품을 만들 것.
+23. 기존 코드가 주어지면 요청된 수정만 반영한 전체 코드를 다시 출력할 것(기존 디자인 품질은 유지/향상).`;
+
+const PROMPT_REWRITE_SYSTEM = `당신은 말로(Mallo)의 숨겨진 프롬프트 정제 엔진입니다.
+사용자가 짧고 모호하게 입력한 한국어 요청을, 생성 모델이 한 번에 완성도 높은 웹 도구를 만들 수 있는 "정제된 제작 프롬프트"로 바꿉니다.
+
+[목표]
+- input: 사용자가 실제로 입력한 문장
+- output: 생성 모델에 다시 넘길 정제 프롬프트
+- 사용자의 원래 의도를 보존하되, 빠진 세부사항은 실무적으로 가장 자연스러운 기본값으로 채웁니다.
+- 과한 기능 추가보다, 바로 쓸 수 있는 완성품에 필요한 필수 기능을 정확히 잡습니다.
+
+[반드시 추론할 것]
+1. 사용자가 진짜 만들고 싶은 도구의 목적과 대상 사용자
+2. 핵심 업무 흐름: 사용자가 열고, 입력하고, 확인하고, 수정하고, 저장하는 순서
+3. 필요한 입력 필드와 데이터 구조
+4. 화면 구성: 헤더/요약 지표/입력 폼/목록 또는 보드/상세 또는 결과 영역
+5. 필수 기능: 추가, 수정, 삭제, 검색/필터, 정렬, 통계, CSV/인쇄 등 도메인에 맞는 기능
+6. 오류 방지: 빈 값, 숫자/날짜 형식, 중복, 삭제 확인, 저장 실패 대응
+7. 샘플 데이터: 한국어 현실 데이터 5~8개
+8. 디자인 방향: 전문적인 SaaS 느낌, 반응형, 접근성, 모바일 사용성
+9. 기존 앱 수정 요청이라면 기존 기능을 깨지 않고 바꿔야 할 부분과 유지해야 할 부분
+
+[질문 정책]
+- 대부분의 요청은 질문하지 말고 합리적 기본 가정으로 바로 만들 수 있게 정제합니다.
+- 답이 없으면 완전히 다른 제품이 되는 핵심 선택이 빠진 경우에만 "확인 질문"을 최대 3개 적습니다.
+- 확인 질문을 적더라도 반드시 "기본 가정"을 함께 적어, 답변 없이도 생성 모델이 완성품을 만들 수 있게 합니다.
+
+[출력 형식]
+아래 섹션명만 사용하고, 한국어로 간결하게 작성하세요. 코드는 절대 쓰지 마세요.
+
+정제 프롬프트:
+- 의도:
+- 만들 제품:
+- 핵심 사용자 흐름:
+- 화면 구성:
+- 데이터/입력 필드:
+- 필수 기능:
+- 검증/오류 방지:
+- 샘플 데이터:
+- 디자인 기준:
+- 완료 기준:
+
+확인 질문(정말 필요할 때만):
+- 
+
+기본 가정:
+- `;
 
 // 자동 모델 선택: 사용자는 모델을 고르지 않음. 요청 난이도를 보고 Sonnet/Opus 자동 결정.
 //  - 기본은 Sonnet(저렴·빠름)
@@ -54,38 +101,124 @@ function pickClaudeModel(prompt, hasCode) {
   return (redo || complex || longReq) ? opus : sonnet;
 }
 
-// 프롬프트 보정: 비전문가의 짧고 모호한 요청 → 구체적 요구사항으로 확장.
-// 비용·속도 위해 무료 모델(Gemini)로 처리. 키 없거나 실패하면 null 반환 → 원본 프롬프트 사용(안전).
-async function boostPrompt(prompt) {
-  let key = '';
-  try { key = env('AI_API_KEY'); } catch {}
-  if (!key) { try { key = env('LLM_FALLBACK_API_KEY'); } catch {} }
-  if (!key) return null;
-  const model = env('BOOST_MODEL', 'gemini-2.5-flash');
-  const sys = '당신은 비전문가의 짧은 요청을 받아, 개발자가 바로 구현할 수 있는 명확한 "웹 업무 도구 요구사항"으로 확장하는 기획자입니다. 한국어로 150단어 이내, 간결한 불릿으로: 핵심 기능, 필요한 입력 항목(필드), 화면 구성, 한눈에 보는 요약 지표, 샘플 데이터 성격. 사용자가 말하지 않은 부분은 가장 상식적인 기본값으로 채우되 과하게 부풀리지 마세요. 코드는 쓰지 말고 요구사항만 출력.';
-  try {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 8000);
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`,
-      {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        signal: ctrl.signal,
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: sys }] },
-          contents: [{ role: 'user', parts: [{ text: '사용자 요청: ' + prompt }] }],
-          generationConfig: { temperature: 0.4, maxOutputTokens: 600 },
-        }),
-      }
-    );
-    clearTimeout(timer);
+async function callPromptRewriter(provider, apiKey, modelName, prompt, hasCode) {
+  const task = hasCode ? '기존 앱 수정 요청' : '새 웹 도구 생성 요청';
+  const userText = `작업 유형: ${task}\n사용자 원문:\n${prompt}`;
+
+  if (provider === 'claude') {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({
+        model: modelName,
+        max_tokens: 1400,
+        temperature: 0.2,
+        system: PROMPT_REWRITE_SYSTEM,
+        messages: [{ role: 'user', content: userText }],
+      }),
+    });
     if (!res.ok) return null;
     const j = await res.json();
-    const parts = j.candidates?.[0]?.content?.parts;
-    const text = Array.isArray(parts) ? parts.map((p) => p.text).filter(Boolean).join('').trim() : '';
+    const text = Array.isArray(j.content) ? j.content.map((p) => p.text).filter(Boolean).join('').trim() : '';
     return text || null;
-  } catch { return null; }
+  }
+
+  if (provider === 'openai') {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: modelName,
+        temperature: 0.2,
+        max_tokens: 1400,
+        messages: [
+          { role: 'system', content: PROMPT_REWRITE_SYSTEM },
+          { role: 'user', content: userText },
+        ],
+      }),
+    });
+    if (!res.ok) return null;
+    const j = await res.json();
+    return j.choices?.[0]?.message?.content?.trim() || null;
+  }
+
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${encodeURIComponent(apiKey)}`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: PROMPT_REWRITE_SYSTEM }] },
+        contents: [{ role: 'user', parts: [{ text: userText }] }],
+        generationConfig: { temperature: 0.2, maxOutputTokens: 1400 },
+      }),
+    }
+  );
+  if (!res.ok) return null;
+  const j = await res.json();
+  const parts = j.candidates?.[0]?.content?.parts;
+  const text = Array.isArray(parts) ? parts.map((p) => p.text).filter(Boolean).join('').trim() : '';
+  return text || null;
+}
+
+// 숨은 프롬프트 정제: 사용자 원문 → 생성 모델용 정제 프롬프트.
+// 실패하면 null 반환 → 시스템 프롬프트의 기본 정제 규칙 + 원본 요청으로 계속 진행.
+async function boostPrompt(prompt, hasCode) {
+  if (env('PROMPT_BOOST', '1') === '0' || env('PROMPT_REWRITE', '1') === '0') return null;
+
+  const explicitKey = env('PROMPT_REWRITE_API_KEY', '');
+  const fallbackKey = env('LLM_FALLBACK_API_KEY', '');
+  const geminiKey = env('AI_API_KEY', '');
+  const primaryKey = env('LLM_API_KEY', '');
+
+  let provider = env('PROMPT_REWRITE_PROVIDER', '');
+  let apiKey = explicitKey;
+  if (!apiKey && fallbackKey) {
+    provider = provider || env('LLM_FALLBACK_PROVIDER', 'gemini');
+    apiKey = fallbackKey;
+  }
+  if (!apiKey && geminiKey) {
+    provider = provider || 'gemini';
+    apiKey = geminiKey;
+  }
+  if (!apiKey && primaryKey) {
+    provider = provider || env('LLM_PROVIDER', 'gemini');
+    apiKey = primaryKey;
+  }
+  if (!apiKey) return null;
+  provider = provider || 'gemini';
+
+  const defaultModel = provider === 'claude'
+    ? env('LLM_MODEL_SIMPLE', env('LLM_MODEL', 'claude-sonnet-4-6'))
+    : provider === 'openai'
+      ? env('PROMPT_REWRITE_OPENAI_MODEL', 'gpt-4o-mini')
+      : env('BOOST_MODEL', 'gemini-2.5-flash');
+  const model = env('PROMPT_REWRITE_MODEL', defaultModel);
+
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), Number(env('PROMPT_REWRITE_TIMEOUT_MS', '9000')));
+    const run = callPromptRewriter(provider, apiKey, model, prompt, hasCode);
+    const text = await Promise.race([
+      run,
+      new Promise((_, reject) => ctrl.signal.addEventListener('abort', () => reject(new Error('timeout')), { once: true })),
+    ]);
+    clearTimeout(timer);
+    return typeof text === 'string' && text.trim() ? text.trim().slice(0, 5000) : null;
+  } catch {
+    return null;
+  }
+}
+
+function buildUserPrompt(prompt, code, refinedPrompt) {
+  const hiddenRefine = refinedPrompt
+    ? `\n\n[내부 정제 프롬프트 — 사용자에게 보이지 않음]\n${refinedPrompt}\n\n[실행 규칙]\n- 사용자 원문이 최우선입니다. 정제 프롬프트는 빠진 세부사항을 채우는 제작 지시서로 사용하세요.\n- 확인 질문이 있더라도, 기본 가정으로 바로 완성품을 구현하세요.\n- 최종 출력에는 내부 정제 과정이나 질문 목록을 설명하지 말고 완성된 HTML만 내세요.`
+    : `\n\n[내부 정제 규칙 — 사용자에게 보이지 않음]\n사용자 요청을 먼저 의도, 필드, 화면, 기능, 검증, 샘플 데이터, 디자인 기준으로 스스로 정제한 뒤 구현하세요. 모호한 부분은 가장 실무적인 기본값으로 결정하고 완성품을 만드세요.`;
+
+  if (code) {
+    return `기존 앱 코드:\n\`\`\`html\n${code}\n\`\`\`\n\n사용자 원문 수정 요청: ${prompt}${hiddenRefine}`;
+  }
+  return `사용자 원문 요청: ${prompt}${hiddenRefine}`;
 }
 
 export default async function handler(req) {
@@ -95,7 +228,19 @@ export default async function handler(req) {
   const user = await getUser(req);
   if (!user) return json({ error: '로그인이 만료됐어요. 다시 로그인해 주세요.' }, 401);
 
-  // 2. 체험/구독/월간한도 검사 + 사용량 차감 (DB에서 원자적으로)
+  // 2. 요청 검증
+  let body;
+  try { body = await req.json(); } catch { return json({ error: '요청 형식이 잘못됐어요' }, 400); }
+  const { prompt, code } = body || {};
+  if (!prompt || typeof prompt !== 'string' || prompt.length > 4000) {
+    return json({ error: '요청 내용을 확인해 주세요 (최대 4000자)' }, 400);
+  }
+
+  // 3. 프롬프트 정제: 사용자 원문을 서버 내부에서 제작 지시서로 바꾼 뒤 실제 생성 모델에 전달.
+  const spec = await boostPrompt(prompt, !!code);
+  const userPrompt = buildUserPrompt(prompt, code, spec);
+
+  // 4. 체험/구독/월간한도 검사 + 사용량 차감 (DB에서 원자적으로)
   const rpc = await sb('rpc/use_generation', {
     method: 'POST',
     body: JSON.stringify({
@@ -120,25 +265,7 @@ export default async function handler(req) {
     return json({ error: MSG[code] || MSG.limit, code }, status);
   }
 
-  // 3. 요청 검증
-  let body;
-  try { body = await req.json(); } catch { return json({ error: '요청 형식이 잘못됐어요' }, 400); }
-  const { prompt, code } = body || {};
-  if (!prompt || typeof prompt !== 'string' || prompt.length > 4000) {
-    return json({ error: '요청 내용을 확인해 주세요 (최대 4000자)' }, 400);
-  }
-  // 프롬프트 보정: 신규 생성일 때만, 무료 모델로 모호한 요청을 구체적 요구사항으로 확장(실패 시 원본 사용)
-  let spec = null;
-  if (!code && env('PROMPT_BOOST', '1') !== '0') {
-    spec = await boostPrompt(prompt);
-  }
-  const userPrompt = code
-    ? `기존 앱 코드:\n\`\`\`html\n${code}\n\`\`\`\n\n수정 요청: ${prompt}`
-    : (spec
-        ? `만들 것(사용자 요청): ${prompt}\n\n[참고 — 아래는 위 요청을 구체화한 요구사항입니다. 사용자의 원래 의도를 우선하되, 빠진 부분을 채우는 참고로만 쓰세요]\n${spec}`
-        : `만들 것: ${prompt}`);
-
-  // 4. LLM 호출 (서버 환경변수의 키 사용 — 클라이언트는 모름)
+  // 5. LLM 호출 (서버 환경변수의 키 사용 — 클라이언트는 모름)
   // 공급자별 요청 빌더 — 1차(유료·고품질)와 폴백(무료) 양쪽에 재사용
   function buildCall(prov, apiKey, modelName) {
     if (prov === 'claude') {
@@ -184,7 +311,7 @@ export default async function handler(req) {
   const provider = env('LLM_PROVIDER', 'gemini');
   const key = env('LLM_API_KEY');
   const primaryModel = provider === 'claude'
-    ? pickClaudeModel(prompt, !!code)
+    ? pickClaudeModel(userPrompt, !!code)
     : env('LLM_MODEL', provider === 'openai' ? 'gpt-4o' : 'gemini-2.0-flash');
 
   let call = buildCall(provider, key, primaryModel);
@@ -218,7 +345,7 @@ export default async function handler(req) {
     return json({ error: friendly }, 503);
   }
 
-  // 5. 어떤 LLM이든 동일한 형식(data: {"t":"..."})으로 변환해 스트리밍
+  // 6. 어떤 LLM이든 동일한 형식(data: {"t":"..."})으로 변환해 스트리밍
   const enc = new TextEncoder();
   const dec = new TextDecoder();
   const reader = upstream.body.getReader();
