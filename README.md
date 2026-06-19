@@ -38,14 +38,14 @@
 | `api/generate.js` | 프롬프트 정제 + LLM 프록시 + 생성권 차감/실패 복구 + SSE 스트리밍 |
 | `api/me.js` | 내 무료 체험/생성권 잔액 조회 |
 | `api/purchase.js` | 포트원 단건결제 검증 + 생성권 충전 |
-| `api/config.js` | 프론트에 Supabase 공개 설정·생성권 가격 전달 |
+| `api/config.js` | 프론트에 Supabase 공개 설정·생성권 가격·결제 준비 상태 전달 |
 | `api/_lib.js` | 공용 유틸 + 생성권 가격 단일 출처 |
 | `supabase.sql` | DB 스키마 + 생성권 충전/차감/복구 함수 |
 | `terms.html` / `refund.html` / `privacy.html` | 약관·환불·개인정보 문서 |
 
 ## 배포 순서 (약 20분)
 
-### 1. Supabase 설정 (무료)
+### 1. Supabase 설정
 1. [supabase.com](https://supabase.com) → New Project 생성
 2. **SQL Editor** → `supabase.sql` 내용 붙여넣고 Run
 3. **Authentication → Providers → Google/Kakao** 활성화
@@ -54,11 +54,23 @@
    - Client ID/Secret을 Supabase에 입력
 4. **Settings → API**에서 `URL`, `anon key`, `service_role key` 복사해 둠
 
-### 2. LLM 키 발급
+### 2. PortOne 카카오페이 단건결제 설정
+1. [PortOne 관리자 콘솔](https://admin.portone.io)에서 상점 생성
+2. **결제 연동 → 연동 정보**에서 `Store ID` 확인
+3. **결제 연동 → 채널 관리**에서 카카오페이 결제 채널 생성 후 `Channel Key` 확인
+4. **결제 연동 → API Secret**에서 서버 API 시크릿 발급
+5. Vercel 환경변수에 아래 3개를 추가
+   - `PORTONE_STORE_ID`
+   - `PORTONE_CHANNEL_KEY`
+   - `PORTONE_API_SECRET`
+6. 테스트 모드에서 1건/5건 결제 → `/api/purchase`가 PortOne 결제 조회 후 `add_credits`로 생성권을 충전하는지 확인
+7. 실연동 전환 후 실제 2,900원 결제/취소/부분 환불 운영 플로우 확인
+
+### 3. LLM 키 발급
 - 추천: Claude 품질 모델 + Gemini 폴백
 - 또는 Gemini / OpenAI 단독 운영 가능
 
-### 3. Vercel 배포
+### 4. Vercel 배포
 1. 이 폴더를 GitHub 저장소에 푸시 → [vercel.com](https://vercel.com)에서 Import
 2. **Settings → Environment Variables**:
 
@@ -80,7 +92,9 @@
 
 ## 운영 체크리스트
 - [ ] Supabase SQL 최신본 재실행: `add_credits`, `use_generation`, `restore_generation` 함수 반영
-- [ ] 포트원 카카오페이 단건결제 실결제/취소 테스트
+- [ ] Vercel 환경변수 `PORTONE_STORE_ID`, `PORTONE_CHANNEL_KEY`, `PORTONE_API_SECRET` 입력
+- [ ] 포트원 카카오페이 테스트 채널로 1건 결제/충전 테스트
+- [ ] 포트원 실연동 채널로 소액 결제/취소 테스트
 - [ ] 생성 실패 시 생성권 복구 테스트
 - [ ] 이용약관/환불 정책/개인정보처리방침 최종 검토
 - [ ] 어뷰징 방지: 계정당 쿨다운, 일일 상한, 프롬프트 길이 제한
