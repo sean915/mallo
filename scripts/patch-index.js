@@ -69,5 +69,11 @@ replaceOnce(
   'sanitized share copy'
 );
 
+replaceOnce(
+`const payConfigured = ()=> !!(S.cfg && S.cfg.payStoreId && S.cfg.payChannelKey);`,
+`const payConfigured = ()=> !!(S.cfg && S.cfg.payReady && S.cfg.payStoreId && S.cfg.payChannelKey);`,
+  'payment readiness check'
+);
+
 writeFileSync(path, html);
-console.log('Patched index.html security guards');
+console.log('Patched index.html security guards and payment readiness');
