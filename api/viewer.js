@@ -67,17 +67,17 @@ function loadLocalSeed(){
 
 function withShim(html, seed){
   const seedJson = JSON.stringify(seed || {}).replace(/</g, '\\u003c');
-  const shim = '<scr'+'ipt>(function(){try{'
-    + 'var mem=' + seedJson + ';var ses={};var P=window.parent;'
-    + 'function notify(){try{P.postMessage({__mallo:"data",data:mem},"*");}catch(e){}}'
-    + 'function mk(store,persist){return{getItem:function(k){k=String(k);return Object.prototype.hasOwnProperty.call(store,k)?store[k]:null;},setItem:function(k,v){store[String(k)]=String(v);if(persist)notify();},removeItem:function(k){delete store[String(k)];if(persist)notify();},clear:function(){Object.keys(store).forEach(function(k){delete store[k];});if(persist)notify();},key:function(i){return Object.keys(store)[i]||null;},get length(){return Object.keys(store).length;}};}'
-    + 'Object.defineProperty(window,"localStorage",{value:mk(mem,true),configurable:true});'
-    + 'Object.defineProperty(window,"sessionStorage",{value:mk(ses,false),configurable:true});'
-    + 'var _aiq={},_aid=0;'
-    + 'function _ai(prompt){return new Promise(function(res,rej){var id=++_aid;_aiq[id]={res:res,rej:rej};try{P.postMessage({__mallo:"ai",id:id,prompt:String(prompt==null?"":prompt)},"*");}catch(e){rej(e);}setTimeout(function(){if(_aiq[id]){_aiq[id].rej(new Error("AI 응답 시간 초과"));delete _aiq[id];}},60000);});}'
-    + 'window.addEventListener("message",function(e){var d=e.data;if(!d||d.__mallo!=="ai-result")return;var q=_aiq[d.id];if(!q)return;delete _aiq[d.id];if(d.error)q.rej(new Error(d.error));else q.res(d.text||"");});'
-    + 'var _A={ai:_ai};window["말로"]=_A;window.mallo=_A;'
-    + '}catch(e){}})();</scr'+'ipt>';
+  const shim = '<scr'+'ipt>(function(){'
+    + 'var SEED=' + seedJson + ';'
+    + 'var listeners={};var memory={};'
+    + 'function post(){try{parent.postMessage({__mallo:"data",data:memory},"*");}catch(e){}}'
+    + 'function patch(){var rs=localStorage.setItem.bind(localStorage),rg=localStorage.getItem.bind(localStorage),rr=localStorage.removeItem.bind(localStorage);localStorage.setItem=function(k,v){memory[String(k)]=String(v);post();try{return rs(k,v)}catch(e){}};localStorage.getItem=function(k){k=String(k);if(Object.prototype.hasOwnProperty.call(memory,k))return memory[k];try{return rg(k)}catch(e){return null}};localStorage.removeItem=function(k){delete memory[String(k)];post();try{return rr(k)}catch(e){}};}'
+    + 'try{Object.assign(memory,SEED||{});}catch(e){}'
+    + 'try{patch();}catch(e){}'
+    + 'window["\uB9D0\uB85C"]=window["\uB9D0\uB85C"]||{};window.mallo=window.mallo||window["\uB9D0\uB85C"];'
+    + 'window["\uB9D0\uB85C"].ai=window.mallo.ai=function(p){return new Promise(function(resolve,reject){var id=Math.random().toString(36).slice(2);listeners[id]={resolve:resolve,reject:reject};try{parent.postMessage({__mallo:"ai",id:id,prompt:String(p==null?"":p)},"*");}catch(e){reject(e);}setTimeout(function(){if(listeners[id]){delete listeners[id];reject(new Error("AI \uC751\uB2F5 \uC2DC\uAC04 \uCD08\uACFC"));}},60000);});};'
+    + 'window.addEventListener("message",function(e){var d=e.data;if(!d)return;if((d.__mallo==="ai_result"||d.__mallo==="ai-result")&&listeners[d.id]){var l=listeners[d.id];delete listeners[d.id];d.error?l.reject(new Error(d.error)):l.resolve(d.text||"");}});'
+    + '})();</scr'+'ipt>';
   if(/<head[^>]*>/i.test(html)) return html.replace(/<head[^>]*>/i, m => m + shim);
   if(/<html[^>]*>/i.test(html)) return html.replace(/<html[^>]*>/i, m => m + shim);
   return shim + html;
