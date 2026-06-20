@@ -827,11 +827,14 @@ $('btnInstallApp').onclick = ()=>{
   location.href = location.origin + '/?t=' + S.currentToolId;   // 앱 화면으로 → 거기서 설치
 };
 
-// 내려받기 버튼 → OS 선택 모달
+// 내려받기 버튼 → OS 선택 모달 (데스크톱 전용)
 $('btnDownload').onclick = ()=>{
+  if(mq.matches){ toast('휴대폰에서는 "📲 앱으로 설치"로 홈 화면에 추가해 사용하세요'); return; }
   if(!S.code){ toast('아직 만든 도구가 없어요. 먼저 앱을 만들어 주세요!'); return; }
   $('dlModal').classList.remove('hidden');
 };
+// 모바일에서는 데스크톱 ZIP 내려받기 버튼을 숨기고 PWA 설치로 유도
+if(mq.matches) $('btnDownload').classList.add('hidden');
 $('dlClose').onclick = ()=>{
   if($('dlProgress').style.display !== 'none') return;
   $('dlModal').classList.add('hidden');
