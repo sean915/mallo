@@ -470,7 +470,7 @@ async function openMyTools(){
       row.innerHTML = '<div class="ti-main"><div class="ti-name"></div><div class="ti-date">'+ds+' 수정</div></div><button class="ti-open">열기</button><button class="ti-app" title="앱으로 열기·설치">📲</button><button class="ti-share" title="공유 링크 복사">🔗</button><button class="ti-del">삭제</button>';
       row.querySelector('.ti-name').textContent = t.title || '내 도구';
       row.querySelector('.ti-open').onclick = ()=> loadTool(t.id);
-      row.querySelector('.ti-app').onclick = ()=> { location.href = location.origin + '/?t=' + t.id; };
+      row.querySelector('.ti-app').onclick = async ()=> { try{ await S.supabase.from('tools').update({ shared: true }).eq('id', t.id); }catch(e){} location.href = location.origin + '/?t=' + t.id; };
       row.querySelector('.ti-share').onclick = ()=> shareTool(t.id);
       row.querySelector('.ti-del').onclick = ()=> delTool(t.id, row);
       list.appendChild(row);
@@ -827,8 +827,9 @@ $('btnDeleteAcct').onclick = async (e)=>{
     setTimeout(()=> location.reload(), 1500);
   }catch(err){ toast('탈퇴 처리에 실패했어요. 잠시 후 다시 시도해 주세요'); }
 };
-$('btnInstallApp').onclick = ()=>{
+$('btnInstallApp').onclick = async ()=>{
   if(!S.currentToolId){ toast('먼저 도구를 만들어 주세요'); return; }
+  try{ await S.supabase.from('tools').update({ shared: true }).eq('id', S.currentToolId); }catch(e){}
   location.href = location.origin + '/?t=' + S.currentToolId;   // 앱 화면으로 → 거기서 설치
 };
 
