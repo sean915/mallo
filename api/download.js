@@ -27,6 +27,14 @@ export default async function handler(req) {
   catch { return new Response(JSON.stringify({ error: '잘못된 요청' }),
     { status: 400, headers: { 'Content-Type': 'application/json' } }); }
 
+  // OS 별칭 정규화 — 프론트엔드/캐시된 구버전 호환 (win→windows, mac→mac-arm 기본)
+  const OS_ALIASES = {
+    win: 'windows', windows: 'windows',
+    mac: 'mac-arm', 'mac-arm': 'mac-arm', 'mac-x64': 'mac-x64', 'mac-intel': 'mac-x64',
+    linux: 'linux',
+  };
+  os = OS_ALIASES[os] || os;
+
   if (!html)
     return new Response(JSON.stringify({ error: '앱 코드가 없어요' }),
       { status: 400, headers: { 'Content-Type': 'application/json' } });
