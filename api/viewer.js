@@ -85,7 +85,7 @@ function withShim(html, seed){
 
 function withBadge(html){
   const badge = '<a href="/" target="_blank" rel="noopener" style="position:fixed;right:12px;bottom:12px;z-index:2147483647;display:flex;align-items:center;gap:6px;background:#3182f6;color:#fff;font:700 12px/1 Pretendard,-apple-system,sans-serif;padding:9px 13px;border-radius:999px;text-decoration:none;box-shadow:0 4px 14px rgba(0,0,0,.18)">말로로 만들었어요</a>';
-  if(/<\/body>/i.test(html)) return html.replace(/<\/body>/i, badge + '</body>');
+  if(/<\\/body>/i.test(html)) return html.replace(/<\\/body>/i, badge + '</body>');
   return html + badge;
 }
 
