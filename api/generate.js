@@ -91,14 +91,17 @@ function pickClaudeModel(prompt, hasCode) {
   const sonnet = env('LLM_MODEL_SIMPLE', 'claude-sonnet-4-6');
   const opus = env('LLM_MODEL_COMPLEX', 'claude-opus-4-8');
   // MODEL_MODE: 'quality'(기본·항상 최고 모델 Opus) | 'auto'(난이도별) | 'off'(LLM_MODEL 고정)
-  const mode = env('MODEL_MODE', 'quality');
+  const mode = env('MODEL_MODE', 'auto');
   if (mode === 'quality') return opus;          // 품질 최우선: 무조건 최고 성능 모델
   if (mode === 'off') return env('LLM_MODEL', opus);
   const p = String(prompt || '');
-  const redo = hasCode && /(다시|처음부터|완전|별로|이상|마음에\s*안|안\s*돼|안\s*나|엉망|왜\s*이래|제대로|구려|별룬)/.test(p);
-  const complex = /(게임|쇼핑몰|결제|장바구니|주문|대시보드|관리자|예약|캘린더|일정관리|차트|그래프|통계|실시간|드래그|애니메이션|지도|채팅|메신저|멀티|시뮬|에디터|캔버스|물리|점수|랭킹|로그인|데이터베이스|크롤|api)/i.test(p);
-  const longReq = p.length > 180;
-  return (redo || complex || longReq) ? opus : sonnet;
+  if (hasCode) return opus;
+  if (p.length > 120) return opus;
+  const complex = /게임|쇼핑몰|결제|장바구니|주문|대시보드|관리자|예약|캘린더|일정관리|차트|그래프|통계|실시간|드래그|애니메이션|지도|채팅|메신저|멀티|시뮬|에디터|캔버스|물리|점수|랭킹|로그인|데이터베이스|크롤|api/i.test(p);
+  if (complex) return opus;
+  const simple = /계산기|메모|체크리스트|할 일|할일|todo|투두|타이머|스톱워치|환율|디데이|dday|명단|간단/i.test(p);
+  if (simple && p.length <= 60) return sonnet;
+  return opus;
 }
 
 async function callPromptRewriter(provider, apiKey, modelName, prompt, hasCode, signal) {
@@ -338,7 +341,7 @@ export default async function handler(req) {
 
   // 잔액 부족·인증·쿼터 오류(400/401/402/403/429)면 무료 모델로 자동 폴백 → 서비스가 끊기지 않음
   // 활성화 조건: LLM_FALLBACK_API_KEY 환경변수 설정(기본 공급자 gemini, 모델 gemini-2.0-flash)
-  const FALLBACK_STATUSES = [400, 401, 402, 403, 429];
+  const FALLBACK_STATUSES = [400, 401, 402, 403];
   const fbKey = env('LLM_FALLBACK_API_KEY', '');
   if (!upstream.ok && fbKey && FALLBACK_STATUSES.includes(upstream.status)) {
     const errBody = await upstream.text().catch(() => '');
@@ -356,8 +359,8 @@ export default async function handler(req) {
     // 실제 업스트림 오류는 서버 로그에만 남기고, 사용자에겐 공급자/모델이 드러나지 않는 일반 문구만 노출
     console.error('[generate] upstream error', upstream.status, detail.slice(0, 500));
     const friendly =
-      upstream.status === 429
-        ? '지금 사용량이 많아요. 이용권은 차감되지 않았어요. 잠시 후 다시 시도해 주세요.'
+      (upstream.status === 429 || upstream.status === 529)
+        ? '지금 만드는 분이 많아 잠시 대기 중이에요 🙏 이용권은 차감되지 않았어요. 10초쯤 뒤 다시 만들어 주세요.'
         : '도구를 만드는 중 문제가 발생했어요. 이용권은 차감되지 않았어요. 잠시 후 다시 시도해 주세요.';
     return json({ error: friendly }, 503);
   }
