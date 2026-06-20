@@ -55,9 +55,20 @@ document.getElementById('title').textContent = TOOL_TITLE;
 window.addEventListener('beforeinstallprompt', (e)=>{ e.preventDefault(); deferredInstall = e; });
 if('serviceWorker' in navigator){ navigator.serviceWorker.register('/sw.js').catch(()=>{}); }
 
+function isStandalone(){ return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true; }
+function showInstallHint(msg){
+  var old = document.getElementById('__mallo_hint'); if(old) old.remove();
+  var b = document.createElement('div'); b.id='__mallo_hint'; b.textContent = msg;
+  b.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);max-width:90%;background:#191f28;color:#fff;font:600 14px/1.5 Pretendard,-apple-system,sans-serif;padding:14px 18px;border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.25);z-index:2147483647;text-align:center';
+  document.body.appendChild(b); setTimeout(function(){ if(b&&b.parentNode) b.remove(); }, 6000);
+}
 document.getElementById('install').onclick = async ()=>{
-  if(deferredInstall){ deferredInstall.prompt(); try{ await deferredInstall.userChoice; }catch(e){} deferredInstall = null; }
-  else alert('설치 안내: 브라우저 메뉴에서 홈 화면에 추가 또는 앱 설치를 선택해 주세요.');
+  if(isStandalone()){ showInstallHint('이미 앱으로 설치돼 있어요 ✅'); return; }
+  if(deferredInstall){ deferredInstall.prompt(); try{ await deferredInstall.userChoice; }catch(e){} deferredInstall = null; return; }
+  var ua = navigator.userAgent || '';
+  if(/iPhone|iPad|iPod/i.test(ua)) showInstallHint('아이폰: 공유 버튼 → "홈 화면에 추가"를 누르세요');
+  else if(/Android/i.test(ua)) showInstallHint('Chrome 메뉴(⋮) → "앱 설치" 또는 "홈 화면에 추가"를 누르세요');
+  else showInstallHint('주소창 오른쪽 끝 설치 아이콘(⊕), 또는 메뉴(⋮) → "앱 설치"를 누르세요');
 };
 
 function loadLocalSeed(){
