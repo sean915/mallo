@@ -61,7 +61,7 @@ export default async function handler(req) {
     applicationId: 'kr.mallo.app',
     version: '1.0.0',
     defaultMode: 'window',
-    documentRoot: '/',
+    documentRoot: '/resources/',
     url: '/',
     enableServer: true,
     enableNativeAPI: true,
