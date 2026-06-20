@@ -690,6 +690,18 @@ function handlePayReturn(){
 }
 
 /* ================== 생성 플로우 ================== */
+function extractHtml(text){
+  const i = text.indexOf('```html');
+  if(i === -1){
+    const j = text.indexOf('<!DOCTYPE');
+    return j !== -1 ? text.slice(j).replace(/```\s*$/,'') : '';
+  }
+  let body = text.slice(i + 7);
+  const end = body.indexOf('```');
+  if(end !== -1) body = body.slice(0, end);
+  return body.trim();
+}
+
 async function generate(req){
   if(S.busy || !S.session) return;
   S.busy = true;
