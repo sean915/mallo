@@ -45,7 +45,7 @@ export default async function handler(req) {
   const info = BINARY_INFO[os];
 
   // 바이너리 가져오기
-  const host = req.headers.get('host') || 'mallo-alpha.vercel.app';
+  const host = req.headers.get('host') || 'malloai.com';
   const binaryRes = await fetch(`https://${host}/runtimes/${info.file}`);
   if (!binaryRes.ok)
     return new Response(JSON.stringify({
@@ -109,13 +109,13 @@ export default async function handler(req) {
 ▶ 실행 방법
   ${exeName} 파일을 더블클릭하면 바로 실행됩니다.
 
-Powered by 말로 (mallo-alpha.vercel.app) & Neutralino.js ${NEUTRALINO_VERSION}
+Powered by 말로 (malloai.com) & Neutralino.js ${NEUTRALINO_VERSION}
 `;
 
   // ZIP 조립: 바이너리 + resources/index.html (파일시스템 모드)
   const zipOut = zipSync({
     [exeName]:                  [binBytes,            { level: 0 }],
-    'resources/index.html':     [strToU8(html.replace(/<\/body>/i, '<a href="https://mallo-alpha.vercel.app/" target="_blank" rel="noopener" style="position:fixed;right:12px;bottom:12px;z-index:2147483647;background:#3182f6;color:#fff;font:700 12px/1 -apple-system,sans-serif;padding:9px 13px;border-radius:999px;text-decoration:none;box-shadow:0 4px 14px rgba(0,0,0,.18)">⚡ 말로로 만들었어요</a></body>')),       { level: 6 }],
+    'resources/index.html':     [strToU8(html.replace(/<\/body>/i, '<a href="https://malloai.com/" target="_blank" rel="noopener" style="position:fixed;right:12px;bottom:12px;z-index:2147483647;background:#3182f6;color:#fff;font:700 12px/1 -apple-system,sans-serif;padding:9px 13px;border-radius:999px;text-decoration:none;box-shadow:0 4px 14px rgba(0,0,0,.18)">⚡ 말로로 만들었어요</a></body>')),       { level: 6 }],
     'neutralino.config.json':   [strToU8(configJson), { level: 9 }],
     '실행방법.txt':              [strToU8(readme),     { level: 9 }],
   });
