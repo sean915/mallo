@@ -378,6 +378,1019 @@ $('mtabs').addEventListener('click', e=>{ const b=e.target.closest('.mtab'); if(
 /* ================== 생성 코드 ↔ 미리보기 데이터 저장 shim ================== */
 function withShim(html, seed){
   const seedJson = JSON.stringify(seed || {}).replace(/<\/script/gi, '<\\/script');
+  const shim = `<script>\n(function(){\n  const SEED=${seedJson};\n  const KEY='__mallo_internal__';\n  const listeners=[];\n  const memory={};\n  function post(){ try{ parent.postMessage({__mallo:'data',data:memory},'*'); }catch(e){} }\n  function patch(){\n    const rawSet=localStorage.setItem.bind(localStorage), rawGet=localStorage.getItem.bind(localStorage), rawRemove=localStorage.removeItem.bind(localStorage);\n    localStorage.setItem=function(k,v){ memory[k]=v; post(); try{return rawSet(k,v)}catch(e){} };\n    localStorage.getItem=function(k){ if(Object.prototype.hasOwnProperty.call(memory,k)) return memory[k]; try{return rawGet(k)}catch(e){return null} };\n    localStorage.removeItem=function(k){ delete memory[k]; post(); try{return rawRemove(k)}catch(e){} };\n  }\n  try{ Object.assign(memory, SEED||{}); patch(); }catch(e){}\n  window.말로 = window.말로 || {}; window.mallo = window.mallo || window.말로; window.말로.fetch = window.mallo.fetch = function(url,opts){ return new Promise((resolve,reject)=>{ const id=Math.random().toString(36).slice(2); listeners[id]={resolve,reject}; parent.postMessage({__mallo:'proxy',id,url:String(url||''),opts:opts||{}},'*'); setTimeout(()=>{ if(listeners[id]){ delete listeners[id]; reject(new Error('요청 시간이 초과됐어요')); }},30000); }); };\n  window.말로.ai = window.mallo.ai = function(prompt){\n    return new Promise((resolve,reject)=>{\n      const id=Math.random().toString(36).slice(2);\n      listeners[id]={resolve,reject};\n      parent.postMessage({__mallo:'ai',id,prompt:String(prompt||'')},'*');\n      setTimeout(()=>{ if(listeners[id]){ delete listeners[id]; reject(new Error('AI 응답 시간이 초과됐어요')); }},30000);\n    });\n  };\n  window.addEventListener('message',e=>{ const d=e.data; if(d&&(d.__mallo==='ai_result'||d.__mallo==='proxy_result')&&listeners[d.id]){ const l=listeners[d.id]; delete listeners[d.id]; d.error?l.reject(new Error(d.error)):l.resolve(d.__mallo==='proxy_result'?d.result:(d.text||'')); } });\n})();\n<\/script>`;
+  if(/<head[^>]*>/i.test(html)) return html.replace(/<head[^>]*>/i, m => m + shim);
+  return shim + html;
+}
+function withBadge(html, origin){
+  const url = (origin || location.origin) + '/';
+  const badge = '<a href="' + url + '" target="_blank" rel="noopener" style="position:fixed;right:12px;bottom:12px;z-index:2147483647;display:flex;align-items:center;gap:6px;background:#3182f6;color:#fff;font:700 12px/1 Pretendard,-apple-system,sans-serif;padding:9px 13px;border-radius:999px;text-decoration:none;box-shadow:0 4px 14px rgba(0,0,0,.18)">⚡ 말로로 만들었어요</a>';
+  if(/<\/body>/i.test(html)) return html.replace(/<\/body>/i, badge + '</body>');
+  return html + badge;
+}
+let lastRender = 0;
+function renderPreview(html, force=false){
+  if(!html) return;
+  const now = Date.now();
+  if(!force && now - lastRender < 700) return;
+  lastRender = now;
+  $('empty').classList.add('hidden');
+  $('frame').srcdoc = withShim(html, S.toolData || {});
+}
+
+/* ================== 내 도구함 (저장·복원) ================== */
+// 미리보기에서 사용자가 입력한 데이터를 받아 자동 저장
+window.addEventListener('message', (e)=>{
+  const d = e.data;
+  if(d && d.__mallo === 'ai'){ handleAiRequest(e.source, d.id, d.prompt); return; }
+  if(d && d.__mallo === 'proxy'){ handleProxyRequest(e.source, d.id, d.url, d.opts); return; }
+  if(!(d && d.__mallo === 'data' && d.data)) return;
+  S.toolData = d.data;
+  if(S.currentToolId && S.session){
+    // 너무 자주 쓰지 않도록 살짝 debounce
+    clearTimeout(S._saveTimer);
+    S._saveTimer = setTimeout(()=>{
+      S.supabase.from('tools').update({ data:S.toolData, updated_at:new Date().toISOString() }).eq('id', S.currentToolId);
+    }, 500);
+  } else if(S.viewerId && !S.viewerOwner){
+    try{ localStorage.setItem('mallo_tool_' + S.viewerId, JSON.stringify(S.toolData)); }catch(e){}
+  }
+});
+async function handleProxyRequest(source, id, url, opts){
+  try{
+    const res = await fetch('/api/proxy', { method:'POST', headers:{ 'content-type':'application/json', authorization:'Bearer ' + S.session.access_token }, body: JSON.stringify({ url: url, method:(opts&&opts.method)||'GET', headers:(opts&&opts.headers)||{}, body:(opts&&opts.body)||null }) });
+    const j = await res.json();
+    if(!res.ok){ source.postMessage({__mallo:'proxy_result', id, error:j.error||'요청에 실패했어요'}, '*'); return; }
+    let parsed = j.body;
+    try{ if((j.contentType||'').indexOf('json')!==-1) parsed = JSON.parse(j.body); }catch(e){}
+    source.postMessage({__mallo:'proxy_result', id, result:{ status:j.status, contentType:j.contentType, data:parsed, raw:j.body }}, '*');
+  }catch(e){ source.postMessage({__mallo:'proxy_result', id, error:e.message||'요청에 실패했어요'}, '*'); }
+}
+async function handleAiRequest(source, id, prompt){
+  try{
+    if(!S.session) throw new Error('로그인이 필요해요');
+    const res = await fetch('/api/ai', {
+      method:'POST', headers:{'content-type':'application/json', authorization:`Bearer ${S.session.access_token}`},
+      body: JSON.stringify({ prompt })
+    });
+    const j = await res.json();
+    source.postMessage({__mallo:'ai_result', id, text:j.text||'', error:j.error||null}, '*');
+  }catch(e){ source.postMessage({__mallo:'ai_result', id, error:e.message||'AI 호출 실패'}, '*'); }
+}
+async function saveCurrentTool(prompt){
+  if(!S.session || !S.code) return;
+  let title = '내 도구';
+  const m = S.code.match(/<title[^>]*>([^<]+)<\/title>/i);
+  if(m) title = m[1].trim().slice(0,50);
+  else title = (prompt || '내 도구').replace(/만들어줘|프로그램|앱/g,'').trim().slice(0,30) || '내 도구';
+  try{
+    if(S.currentToolId){
+      await S.supabase.from('tools').update({ title, html:S.code, data:S.toolData||{}, updated_at:new Date().toISOString() }).eq('id', S.currentToolId);
+    } else {
+      const { data, error } = await S.supabase.from('tools').insert({ user_id:S.session.user.id, title, html:S.code, data:S.toolData||{} }).select('id').single();
+      if(!error && data) S.currentToolId = data.id;
+    }
+  }catch(e){}
+  if(S.currentToolId) $('btnInstallApp').classList.remove('hidden');   // 만들면 바로 '앱으로 설치' 노출
+}
+function resetWorkspace(){
+  S.code = ''; S.codeHistory = false; S.currentToolId = null; S.toolData = {};
+  $('chat').innerHTML = '';
+  $('frame').srcdoc = '';
+  $('empty').classList.remove('hidden');
+  $('welcome').classList.remove('hidden');
+  $('chips').classList.remove('hidden');
+  $('editChips').classList.add('hidden');
+  $('btnInstallApp').classList.add('hidden');
+}
+async function openMyTools(){
+  if(!S.session){ toast('로그인이 필요해요'); return; }
+  const list = $('toolList');
+  list.innerHTML = '<p class="sub">불러오는 중…</p>';
+  $('toolsModal').classList.remove('hidden');
+  try{
+    const { data, error } = await S.supabase.from('tools').select('id,title,updated_at').order('updated_at', { ascending:false });
+    if(error) throw error;
+    if(!data || !data.length){ list.innerHTML = '<p class="sub">아직 저장된 도구가 없어요. 왼쪽에서 하나 만들어 보세요!</p>'; return; }
+    list.innerHTML = '';
+    data.forEach(t=>{
+      const dt = new Date(t.updated_at);
+      const ds = dt.getFullYear()+'.'+String(dt.getMonth()+1).padStart(2,'0')+'.'+String(dt.getDate()).padStart(2,'0');
+      const row = document.createElement('div');
+      row.className = 'tool-item';
+      row.innerHTML = '<div class="ti-main"><div class="ti-name"></div><div class="ti-date">'+ds+' 수정</div></div><button class="ti-open">열기</button><button class="ti-app" title="앱으로 열기·설치">📲</button><button class="ti-share" title="공유 링크 복사">🔗</button><button class="ti-del">삭제</button>';
+      row.querySelector('.ti-name').textContent = t.title || '내 도구';
+      row.querySelector('.ti-open').onclick = ()=> loadTool(t.id);
+      row.querySelector('.ti-app').onclick = async ()=> { try{ await S.supabase.from('tools').update({ shared: true }).eq('id', t.id); }catch(e){} location.href = location.origin + '/?t=' + t.id; };
+      row.querySelector('.ti-share').onclick = ()=> shareTool(t.id);
+      row.querySelector('.ti-del').onclick = ()=> delTool(t.id, row);
+      list.appendChild(row);
+    });
+  }catch(e){ list.innerHTML = '<p class="sub">불러오지 못했어요. 잠시 후 다시 시도해 주세요.</p>'; }
+}
+async function loadTool(id){
+  try{
+    const { data, error } = await S.supabase.from('tools').select('*').eq('id', id).single();
+    if(error || !data) throw error || new Error();
+    S.code = data.html; S.currentToolId = data.id; S.toolData = data.data || {}; S.codeHistory = true;
+    $('welcome').classList.add('hidden'); $('chips').classList.add('hidden'); $('editChips').classList.remove('hidden');
+    $('btnInstallApp').classList.remove('hidden');
+    $('chat').innerHTML = '';
+    addMsg('bot', "'"+(data.title||'내 도구')+"' 도구를 열었어요. 이어서 쓰거나, 아래 버튼·말로 고칠 수 있어요 😊");
+    renderPreview(data.html, true);
+    $('toolsModal').classList.add('hidden');
+    if(mq.matches) setPane('preview');
+  }catch(e){ toast('도구를 열지 못했어요'); }
+}
+async function delTool(id, row){
+  try{ await S.supabase.from('tools').delete().eq('id', id); row.remove(); if(S.currentToolId === id) S.currentToolId = null; }
+  catch(e){ toast('삭제하지 못했어요'); }
+}
+
+/* ================== 인증 ================== */
+function track(name, params){ try{ if(window.gtag) window.gtag('event', name, params||{}); }catch(e){} }
+function loadGA(id){
+  if(!id || window.gtag) return;
+  const s = document.createElement('script'); s.async = true;
+  s.src = 'https://www.googletagmanager.com/gtag/js?id=' + id;
+  document.head.appendChild(s);
+  window.dataLayer = window.dataLayer || [];
+  window.gtag = function(){ dataLayer.push(arguments); };
+  gtag('js', new Date());
+  gtag('config', id);
+}
+async function initAuth(){
+  const cfg = await (await fetch('/api/config')).json();
+  S.cfg = cfg;
+  loadGA(cfg.gaId);
+  S.supabase = createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
+  const { data:{ session } } = await S.supabase.auth.getSession();
+  const tid = new URLSearchParams(location.search).get('t');
+  if(tid){ S.session = session; enterViewer(tid); return; }   // 도구 단독 뷰어(공유/설치형 앱)
+  setSession(session);
+  handlePayReturn();   // 모바일 결제 리다이렉트 복귀 처리
+  S.supabase.auth.onAuthStateChange((_e, sess)=> setSession(sess));
+}
+
+/* ================== 도구 뷰어 + 설치형 앱(PWA) + 공유 ================== */
+let _deferredInstall = null;
+window.addEventListener('beforeinstallprompt', (e)=>{ e.preventDefault(); _deferredInstall = e; });
+function registerSW(){ if('serviceWorker' in navigator){ navigator.serviceWorker.register('/sw.js').catch(()=>{}); } }
+async function enterViewer(tid){
+  registerSW();
+  let data = null;
+  try{ const r = await S.supabase.from('tools').select('*').eq('id', tid).single(); data = r.data; }catch(e){}
+  if(!data){
+    document.body.innerHTML = '<div style="font-family:Pretendard;display:flex;height:100vh;align-items:center;justify-content:center;text-align:center;color:#6b7684;padding:24px">도구를 찾을 수 없어요.<br>링크가 만료됐거나 비공개 도구일 수 있어요.</div>';
+    return;
+  }
+  const isOwner = !!(S.session && S.session.user && S.session.user.id === data.user_id);
+  S.viewerId = tid; S.viewerOwner = isOwner;
+  if(isOwner) S.currentToolId = tid;   // 소유자: 입력 데이터 클라우드 자동저장
+  // 설치용 매니페스트 주입
+  const ml = document.createElement('link'); ml.rel = 'manifest';
+  ml.href = '/api/manifest?t=' + encodeURIComponent(tid) + '&name=' + encodeURIComponent(data.title || '내 도구');
+  document.head.appendChild(ml);
+  document.title = (data.title || '내 도구') + ' · 말로';
+  // 데이터 seed: 소유자=클라우드, 그 외=내 기기 로컬
+  let seed = data.data || {};
+  if(!isOwner){ try{ const loc = localStorage.getItem('mallo_tool_' + tid); if(loc) seed = JSON.parse(loc); }catch(e){} }
+  S.toolData = seed;
+  $('vTitle').textContent = data.title || '내 도구';
+  $('vEdit').classList.toggle('hidden', !isOwner);
+  $('vMake').classList.toggle('hidden', isOwner);   // 받은 사람에게 "나도 만들기" 유입 CTA
+  $('vframe').srcdoc = withBadge(withShim(data.html, seed), location.origin);
+  $('viewer').classList.add('on');
+}
+function bindViewerButtons(){
+  $('vEdit').onclick = ()=>{ location.href = location.origin + '/'; };
+  $('vMake').onclick = ()=>{ location.href = location.origin + '/'; };   // 나도 만들기 → 홈
+  $('vInstall').onclick = async ()=>{
+    if(_deferredInstall){ _deferredInstall.prompt(); try{ await _deferredInstall.userChoice; }catch(e){} _deferredInstall = null; }
+    else { toast('설치 안내: (휴대폰) 브라우저 메뉴 → "홈 화면에 추가" · (PC) 주소창 오른쪽 설치 아이콘'); }
+  };
+}
+async function shareTool(id){
+  try{ await S.supabase.from('tools').update({ shared: true }).eq('id', id); }catch(e){}
+  const link = location.origin + '/?t=' + id;
+  try{ await navigator.clipboard.writeText(link); toast('공유 링크를 복사했어요! 붙여넣어 보내세요 🔗'); }
+  catch(e){ prompt('이 링크를 복사해 공유하세요:', link); }
+}
+const payConfigured = ()=> !!(S.cfg && S.cfg.payStoreId && S.cfg.payChannelKey);
+function setSession(session){
+  S.session = session;
+  const loggedIn = !!session;
+  $('loginModal').classList.toggle('hidden', loggedIn);
+  $('btnLogout').classList.toggle('hidden', !loggedIn);
+  $('btnFeedback').classList.toggle('hidden', !loggedIn);
+  $('btnMyTools').classList.toggle('hidden', !loggedIn);
+  $('trialBadge').classList.toggle('hidden', !loggedIn);
+  if(loggedIn){
+    refreshMe();
+    if(!S.loggedTracked){ S.loggedTracked = true; track('login'); }
+  }
+}
+async function refreshMe(){
+  try{
+    const res = await fetch('/api/me', { headers:{ authorization:`Bearer ${S.session.access_token}` } });
+    if(!res.ok) return;
+    S.me = await res.json();
+    const b = $('trialBadge');
+    const rem = Number(S.me.remaining != null ? S.me.remaining : (S.me.trialLeft || 0));
+    if(S.me.unlimited){
+      b.textContent = '♾️ 무제한 (마스터)';
+      b.classList.remove('expired');
+    } else if(rem > 0){
+      b.textContent = `⚡ 남은 횟수 ${rem}회`;
+      b.classList.remove('expired');
+    } else {
+      b.textContent = '⚡ 충전 필요';
+      b.classList.add('expired');
+    }
+  }catch(e){}
+}
+$('btnGoogle').onclick = ()=> S.supabase.auth.signInWithOAuth({
+  provider:'google',
+  options:{ redirectTo: location.origin }
+});
+$('btnKakao').onclick = ()=> S.supabase.auth.signInWithOAuth({
+  provider:'kakao',
+  options:{ redirectTo: location.origin }
+});
+$('btnLogout').onclick = async ()=>{ await S.supabase.auth.signOut(); location.reload(); };
+
+/* ================== 결제(포트원 · 카카오페이 단건결제 · 프로그램 생성권 충전) ================== */
+function packOrderName(pack){ return '말로 프로그램 생성권 ' + (pack.credits || 0) + '건'; }
+
+// 모달에 생성권 카드 렌더링
+function renderPlans(){
+  const box = $('planBox'); if(!box) return;
+  const packs = (S.cfg && S.cfg.plans) || {};
+  box.innerHTML = '';
+  Object.entries(packs).forEach(([id, p])=>{
+    const b = document.createElement('button');
+    b.className = 'plan' + (id === 'standard' ? ' best' : '');
+    const badge = id === 'standard' ? '<span class="badge">인기</span>' : '';
+    const per = p.credits ? Math.round(p.price / p.credits) : p.price;
+    b.innerHTML = '<div><div class="pn">'+p.name+badge+'</div><div class="pd">'+p.credits+'건 생성권 · 건당 '+per.toLocaleString()+'원 · 만료 없음</div></div><div class="pv">'+p.price.toLocaleString()+'원</div>';
+    b.onclick = ()=> startPurchase(id);
+    box.appendChild(b);
+  });
+}
+async function startPurchase(packId){
+  if(!payConfigured()){ toast('결제 준비 중이에요'); return; }
+  if(!S.session){ toast('로그인이 필요해요'); return; }
+  if(!window.PortOne){ toast('결제 모듈을 불러오는 중이에요. 잠시 후 다시 눌러주세요'); return; }
+  if(S.payBusy) return; S.payBusy = true;
+  const pack = (S.cfg.plans && S.cfg.plans[packId]) || null;
+  if(!pack || !pack.price || !pack.credits){ toast('상품 정보를 확인하지 못했어요'); S.payBusy = false; return; }
+  const paymentId = `mallo-${S.session.user.id}-${Date.now()}`;
+  const orderName = packOrderName(pack);
+  try{
+    try{ localStorage.setItem('mallo_pack', packId); localStorage.setItem('mallo_pid', paymentId); }catch(e){}  // 모바일 복귀용
+    const rsp = await PortOne.requestPayment({
+      storeId: S.cfg.payStoreId,
+      channelKey: S.cfg.payChannelKey,
+      paymentId,
+      orderName,
+      totalAmount: pack.price,
+      currency: 'CURRENCY_KRW',
+      payMethod: 'EASY_PAY',
+      customer: { customerId: S.session.user.id, email: S.session.user.email || undefined },
+      products: [{ id: packId, name: orderName, amount: pack.price, quantity: 1, tag: 'mallo-generation-pack' }],
+      productType: 'DIGITAL',
+      customData: { packId, userId: S.session.user.id, credits: pack.credits },
+      redirectUrl: location.origin + '/?pay=return',   // 모바일에서 카카오페이 후 복귀
+    });
+    if(!rsp || rsp.code != null){ toast(rsp && rsp.message ? rsp.message : '결제가 취소됐어요'); return; }   // 데스크톱(팝업) 경로
+    await confirmPurchase(rsp.paymentId || paymentId, packId);
+  }catch(e){ toast('결제 중 문제가 생겼어요. 잠시 후 다시 시도해 주세요'); }
+  finally{ S.payBusy = false; }
+}
+async function confirmPurchase(paymentId, packId){
+  if(!paymentId || !S.session) return;
+  const res = await fetch('/api/purchase', {
+    method:'POST',
+    headers:{ 'content-type':'application/json', authorization:`Bearer ${S.session.access_token}` },
+    body: JSON.stringify({ paymentId, packId })
+  });
+  if(!res.ok){
+    const err = await res.json().catch(()=>({}));
+    toast(err.error || '결제 확인에 실패했어요. 잠시 후 다시 확인해 주세요');
+    return;
+  }
+  const result = await res.json().catch(()=>({}));
+  track('purchase', { pack: packId });
+  try{ localStorage.removeItem('mallo_pack'); localStorage.removeItem('mallo_pid'); }catch(e){}
+  $('fbModal').classList.add('hidden');
+  await refreshMe();
+  const added = Number(result.credits_added || 0);
+  toast(added ? added+'건 충전 완료! 이제 프로그램을 만들 수 있어요 🎉' : '충전 확인 완료!');
+}
+// 모바일: 카카오페이 결제 후 redirectUrl 로 돌아왔을 때 처리
+function handlePayReturn(){
+  const q = new URLSearchParams(location.search);
+  if(q.get('pay') !== 'return') return;
+  let pid = q.get('paymentId');
+  let packId = q.get('packId') || 'single';
+  try{ pid = pid || localStorage.getItem('mallo_pid'); packId = localStorage.getItem('mallo_pack') || packId; }catch(e){}
+  history.replaceState({}, '', location.origin + location.pathname);
+  if(q.get('code')){ toast(q.get('message') || '결제가 취소됐어요'); return; }
+  if(pid && S.session){ confirmPurchase(pid, packId); }
+  else { toast('결제 확인을 위해 다시 로그인해 주세요'); }
+}
+
+/* ================== 생성 플로우 ================== */
+function extractHtml(text){
+  const i = text.indexOf('```html');
+  if(i === -1){
+    const j = text.indexOf('<!DOCTYPE');
+    return j !== -1 ? text.slice(j).replace(/```\s*$/,'') : '';
+  }
+  let body = text.slice(i + 7);
+  const end = body.indexOf('```');
+  if(end !== -1) body = body.slice(0, end);
+  return body.trim();
+}
+
+async function generate(req){
+  if(S.busy || !S.session) return;
+  S.busy = true;
+  $('btnSend').disabled = true;
+  $('welcome').classList.add('hidden');
+  $('chips').classList.add('hidden');
+  $('editChips').classList.add('hidden');
+  addMsg('user', req);
+  if(mq.matches) setPane('preview');   // 모바일: 만들어지는 화면으로 전환
+  const botMsg = addMsg('bot', '', 'working');
+  botMsg.innerHTML = '<span class="stepText">' + WORKING_STEPS[0] + '</span><span class="dots"></span>';
+  let stepIdx = 0;
+  const stepTimer = setInterval(()=>{
+    stepIdx = Math.min(stepIdx+1, WORKING_STEPS.length-1);
+    const el = botMsg.querySelector('.stepText');
+    if(el) el.textContent = WORKING_STEPS[stepIdx];
+  }, 3500);
+
+  $('liveDot').classList.add('on');
+  $('previewTitle').textContent = '실시간으로 만들어지는 중...';
+
+  let acc = '';
+  try{
+    const res = await fetch('/api/generate', {
+      method:'POST',
+      headers:{
+        'content-type':'application/json',
+        authorization:`Bearer ${S.session.access_token}`
+      },
+      body: JSON.stringify({ prompt:req, code:S.code || undefined, lang:(localStorage.getItem('mallo_lang')||'ko') })
+    });
+
+    if(!res.ok){
+      let err = {};
+      try{ err = await res.json(); }catch(e){}
+      if(err.code === 'trial_over' || err.code === 'limit'){
+        track('trial_over', { reason: err.code });
+        openFeedback(true);
+      }
+      throw new Error(err.error || '문제가 생겼어요. 다시 시도해 주세요.');
+    }
+
+    // 통일된 SSE 수신: data: {"t":"..."} / data: [DONE]
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    while(true){
+      const {done, value} = await reader.read();
+      if(done) break;
+      buf += dec.decode(value, {stream:true});
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for(const line of lines){
+        if(!line.startsWith('data:')) continue;
+        const data = line.slice(5).trim();
+        if(!data || data === '[DONE]') continue;
+        try{
+          const j = JSON.parse(data);
+          if(j.error) throw new Error(j.error);
+          if(j.t){ acc += j.t; renderPreview(extractHtml(acc)); }
+        }catch(e){ if(e.message && !e.message.includes('JSON')) throw e; }
+      }
+    }
+
+    const html = extractHtml(acc);
+    if(!html) throw new Error('결과를 만들지 못했어요. 조금 더 구체적으로 말씀해 주시겠어요?');
+    S.code = html;
+    renderPreview(html, true);
+    clearInterval(stepTimer);
+    botMsg.classList.remove('working');
+    botMsg.textContent = S.codeHistory
+      ? '고쳤어요! 오른쪽에서 확인해 보세요. 더 바꾸고 싶으면 아래 버튼이나 말로 알려주세요 😊'
+      : '완성했어요! 바로 써보세요. 입력한 내용은 자동 저장돼요. 아래 버튼이나 말로 고칠 수 있어요 😊';
+    track('generate', { edited: S.codeHistory });
+    S.codeHistory = true;
+    $('editChips').classList.remove('hidden');   // 탭으로 수정하는 추천 버튼
+    saveCurrentTool(req);                         // 내 도구함에 자동 저장
+    refreshMe();
+  }catch(err){
+    clearInterval(stepTimer);
+    botMsg.classList.remove('working');
+    botMsg.classList.add('err');
+    botMsg.textContent = err.message || '알 수 없는 오류가 났어요. 다시 시도해 주세요.';
+  }finally{
+    $('previewTitle').textContent = '실시간 미리보기';
+    $('liveDot').classList.remove('on');
+    S.busy = false;
+    $('btnSend').disabled = false;
+  }
+}
+
+/* ================== 이벤트 ================== */
+const input = $('input');
+function submit(){
+  const v = input.value.trim();
+  if(!v || S.busy) return;
+  input.value = ''; input.style.height = 'auto';
+  generate(v);
+}
+$('btnSend').onclick = submit;
+input.addEventListener('keydown', e=>{
+  if(e.key === 'Enter' && !e.shiftKey && !e.isComposing){ e.preventDefault(); submit(); }
+});
+input.addEventListener('input', ()=>{ input.style.height='auto'; input.style.height = Math.min(input.scrollHeight,120)+'px'; });
+
+// 직무 도구 카드: 누르면 바로 새 도구 생성 (입력·전송 단계 없음)
+document.querySelectorAll('#chips .tcard[data-prompt]').forEach(c => c.onclick = ()=>{
+  if(S.busy) return;
+  resetWorkspace();
+  generate(c.dataset.prompt);
+});
+// "직접 말로 만들기": 입력창으로
+$('tcMore').onclick = ()=>{ if(mq.matches) setPane('make'); input.focus(); };
+// 만든 뒤 탭으로 수정하는 추천 버튼
+document.querySelectorAll('#editChips .chip').forEach(c => c.onclick = ()=>{ if(!S.busy) generate(c.dataset.edit); });
+
+$('btnNew').onclick = ()=>{
+  if(S.busy) return;
+  resetWorkspace();
+  if(mq.matches) setPane('make');   // 모바일: 입력 화면으로 복귀
+};
+
+$('btnMyTools').onclick = openMyTools;
+$('btnToolsClose').onclick = ()=> $('toolsModal').classList.add('hidden');
+$('btnDeleteAcct').onclick = async (e)=>{
+  e.preventDefault();
+  if(!S.session){ toast('로그인이 필요해요'); return; }
+  if(!confirm('정말 탈퇴할까요?\n내가 만든 도구와 입력한 데이터, 계정 정보가 모두 영구 삭제되며 되돌릴 수 없어요.')) return;
+  try{
+    const { error } = await S.supabase.rpc('delete_account');
+    if(error) throw error;
+    track('delete_account');
+    await S.supabase.auth.signOut();
+    toast('탈퇴가 완료됐어요. 그동안 감사했습니다 🙏');
+    setTimeout(()=> location.reload(), 1500);
+  }catch(err){ toast('탈퇴 처리에 실패했어요. 잠시 후 다시 시도해 주세요'); }
+};
+$('btnInstallApp').onclick = async ()=>{
+  if(!S.currentToolId){ toast('먼저 도구를 만들어 주세요'); return; }
+  try{ await S.supabase.from('tools').update({ shared: true }).eq('id', S.currentToolId); }catch(e){}
+  location.href = location.origin + '/?t=' + S.currentToolId;   // 앱 화면으로 → 거기서 설치
+};
+
+// 내려받기 버튼 → OS 선택 모달 (데스크톱 전용)
+$('btnDownload').onclick = ()=>{
+  if(mq.matches){ toast('휴대폰에서는 "📲 앱으로 설치"로 홈 화면에 추가해 사용하세요'); return; }
+  if(!S.code){ toast('아직 만든 도구가 없어요. 먼저 앱을 만들어 주세요!'); return; }
+  $('dlModal').classList.remove('hidden');
+};
+// 모바일에서는 데스크톱 ZIP 내려받기 버튼을 숨기고 PWA 설치로 유도
+if(mq.matches) $('btnDownload').classList.add('hidden');
+$('dlClose').onclick = ()=>{
+  if($('dlProgress').style.display !== 'none') return;
+  $('dlModal').classList.add('hidden');
+};
+$('dlModal').onclick = (e)=>{
+  if(e.target === $('dlModal') && $('dlProgress').style.display === 'none')
+    $('dlModal').classList.add('hidden');
+};
+
+// OS별 Neutralino 네이티브 앱 다운로드
+document.querySelectorAll('.dlos').forEach(btn => {
+  btn.onclick = async () => {
+    const os = btn.dataset.os;
+    if(!S.code){ toast('앱을 먼저 만들어 주세요!'); return; }
+    if(!S.session){ toast('로그인이 필요해요'); return; }
+
+    $('dlOsBox').style.display = 'none';
+    $('dlProgress').style.display = 'block';
+    $('dlClose').style.display = 'none';
+
+    const reset = () => {
+      $('dlOsBox').style.display = '';
+      $('dlProgress').style.display = 'none';
+      $('dlClose').style.display = '';
+    };
+
+    try {
+      const token = S.session.access_token;
+      let title = '내 도구';
+      const tm = S.code.match(/<title[^>]*>([^<]+)<\/title>/i);
+      if(tm) title = tm[1].trim().slice(0,50);
+
+      const res = await fetch('/api/download', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ html: S.code, title, os }),
+      });
+
+      if(!res.ok){
+        const err = await res.json().catch(()=>({error:'알 수 없는 오류'}));
+        throw new Error(err.error || `서버 오류 (${res.status})`);
+      }
+
+      const blob = await res.blob();
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      const cd = res.headers.get('Content-Disposition') || '';
+      const fnMatch = cd.match(/filename\*=UTF-8''([^;]+)/i);
+      a.download = fnMatch ? decodeURIComponent(fnMatch[1]) : `말로-앱-${os}.zip`;
+      a.href = url;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(()=> URL.revokeObjectURL(url), 5000);
+
+      toast('다운로드 시작됐어요! ZIP 압축 풀고 실행파일 더블클릭하면 앱이 열려요 🎉');
+      reset();
+      $('dlModal').classList.add('hidden');
+
+    } catch(e) {
+      reset();
+      toast('다운로드 실패: ' + e.message, 'err');
+    }
+  };
+});
+/* 피드백 / 베타 안내 */
+function updateStars(){
+  document.querySelectorAll('#fbStars .star').forEach(s=>{
+    s.style.color = (Number(s.dataset.v) <= (S.fbRating||0)) ? '#ffb400' : '#d6dce3';
+  });
+}
+document.querySelectorAll('#fbStars .star').forEach(s=>{
+  s.onclick = ()=>{ S.fbRating = Number(s.dataset.v); updateStars(); };
+});
+function openFeedback(beta){
+  const payOn = payConfigured();
+  if(beta){
+    if(payOn){
+      $('fbTitle').textContent = '무료 횟수를 다 쓰셨어요 🎉';
+      $('fbSub').textContent = '생성권을 충전하면 계속 만들 수 있어요. 카카오페이로 한 번만 결제하면 끝, 구매한 생성권은 만료 없이 계속 쓸 수 있어요.';
+    } else {
+      $('fbTitle').textContent = '무료 체험 3회가 끝났어요 🧪';
+      $('fbSub').textContent = '말로는 아직 베타 테스트 버전이에요. 지금은 결제 없이 준비 중이고, 정식 오픈하면 알려드릴게요. 써보신 후기를 남겨 주시면 큰 힘이 됩니다!';
+    }
+  } else {
+    $('fbTitle').textContent = '의견을 들려주세요 💬';
+    $('fbSub').textContent = '말로는 지금 베타 테스트 중이에요. 좋았던 점·불편한 점·만들고 싶은 기능 뭐든 적어 주세요!';
+  }
+  const box = $('planBox');
+  if(payOn && beta){ renderPlans(); box.classList.remove('hidden'); }
+  else { box.classList.add('hidden'); }
+  $('fbModal').classList.remove('hidden');
+  setTimeout(()=>$('fbText').focus(), 50);
+}
+$('btnFeedback').onclick = ()=> openFeedback(false);
+$('btnFbClose').onclick = ()=> $('fbModal').classList.add('hidden');
+$('btnFbSend').onclick = async ()=>{
+  const msg = $('fbText').value.trim();
+  if(!msg){ toast('내용을 입력해 주세요'); return; }
+  if(!S.session){ toast('로그인이 필요해요'); return; }
+  const btn = $('btnFbSend');
+  btn.disabled = true;
+  try{
+    const res = await fetch('/api/feedback', {
+      method:'POST',
+      headers:{ 'content-type':'application/json', authorization:`Bearer ${S.session.access_token}` },
+      body: JSON.stringify({ message: msg, rating: S.fbRating || null })
+    });
+    if(!res.ok) throw new Error();
+    track('feedback_submit', { rating: S.fbRating || 0 });
+    $('fbModal').classList.add('hidden');
+    $('fbText').value = ''; S.fbRating = 0; updateStars();
+    toast('소중한 의견 감사해요! 🙏');
+  }catch(e){ toast('전송에 실패했어요. 잠시 후 다시 시도해 주세요'); }
+  finally{ btn.disabled = false; }
+};
+
+/* ================== 시작 ================== */
+bindViewerButtons();
+initAuth();
+</script>
+<script>(function mainFn(T){
+  /*__mallo_i18n__*/
+  var cur='ko';
+  function swapText(t){ var s=t.nodeValue; if(!s) return; var k=s.trim(); if(!k) return;
+    if(cur==='en'){ if(T[k]!==undefined){ if(t.__ko==null) t.__ko=s; t.nodeValue=s.replace(k,T[k]); } }
+    else { if(t.__ko!=null) t.nodeValue=t.__ko; } }
+  function swapAttr(el,a){ var v=el.getAttribute(a); if(v==null) return; var k=v.trim(); if(!k) return; var d='__ko_'+a;
+    if(cur==='en'){ if(T[k]!==undefined){ if(el.getAttribute(d)==null) el.setAttribute(d,v); el.setAttribute(a,T[k]); } }
+    else { var o=el.getAttribute(d); if(o!=null) el.setAttribute(a,o); } }
+  function walk(root){ if(!root) return; if(root.nodeType===3){ swapText(root); return; } if(root.nodeType!==1) return;
+    var w=document.createTreeWalker(root,NodeFilter.SHOW_TEXT,null); var n,arr=[]; while(n=w.nextNode()) arr.push(n); arr.forEach(swapText);
+    if(root.querySelectorAll){ Array.prototype.forEach.call(root.querySelectorAll('[placeholder]'),function(e){swapAttr(e,'placeholder');}); Array.prototype.forEach.call(root.querySelectorAll('[title]'),function(e){swapAttr(e,'title');}); }
+    if(root.hasAttribute){ if(root.hasAttribute('placeholder')) swapAttr(root,'placeholder'); if(root.hasAttribute('title')) swapAttr(root,'title'); } }
+  function apply(lang){ cur=lang; document.documentElement.lang=lang; try{localStorage.setItem('mallo_lang',lang);}catch(e){} walk(document.body); }
+  var mo=new MutationObserver(function(ms){ if(cur!=='en') return; ms.forEach(function(m){ if(m.addedNodes) Array.prototype.forEach.call(m.addedNodes,function(nd){ walk(nd); }); if(m.type==='characterData') swapText(m.target); }); });
+  function startObs(){ try{ mo.observe(document.body,{childList:true,subtree:true,characterData:true}); }catch(e){} }
+  function toggle(){ if(document.getElementById('__mlt')) return; var b=document.createElement('button'); b.id='__mlt'; b.textContent=cur==='ko'?'EN':'한'; b.title='Language'; b.style.cssText='position:fixed;top:9px;right:10px;z-index:2147483646;background:#fff;border:1px solid #e5e8eb;border-radius:999px;padding:5px 11px;font:700 12px sans-serif;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.1)'; b.onclick=function(){ apply(cur==='ko'?'en':'ko'); b.textContent=cur==='ko'?'EN':'한'; }; document.body.appendChild(b); }
+  function modal(def){ var ov=document.createElement('div'); ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2147483647;display:flex;align-items:center;justify-content:center;padding:20px'; var bx=document.createElement('div'); bx.style.cssText='background:#fff;border-radius:18px;padding:28px 24px;max-width:330px;width:100%;text-align:center;font-family:Pretendard,-apple-system,sans-serif;box-shadow:0 14px 44px rgba(0,0,0,.22)'; var h=document.createElement('div'); h.style.cssText='font-size:22px;font-weight:800;margin-bottom:4px'; h.textContent='말로 · mallo'; var sub=document.createElement('div'); sub.style.cssText='color:#6b7684;font-size:13.5px;margin-bottom:18px'; sub.textContent='언어를 선택하세요 / Choose your language'; bx.appendChild(h); bx.appendChild(sub); function mk(label,lang){ var b=document.createElement('button'); b.textContent=label; b.style.cssText='display:block;width:100%;margin:8px 0;padding:14px;border-radius:12px;border:2px solid '+(def===lang?'#3182f6':'#e5e8eb')+';background:'+(def===lang?'#eef5ff':'#fff')+';font:700 16px sans-serif;cursor:pointer'; b.onclick=function(){ apply(lang); ov.remove(); toggle(); }; return b; } bx.appendChild(mk('한국어','ko')); bx.appendChild(mk('English','en')); ov.appendChild(bx); document.body.appendChild(ov); }
+  function init(){ var saved=null; try{ saved=localStorage.getItem('mallo_lang'); }catch(e){} startObs(); var def=(navigator.language||'').toLowerCase().indexOf('ko')===0?'ko':'en'; if(saved){ apply(saved); toggle(); } else { cur='ko'; modal(def); } }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init); else init();
+})({"📂 내 도구함":"📂 My Tools","💬 피드백":"💬 Feedback","로그아웃":"Log out","✏️ 만들기":"✏️ Make","👁️ 미리보기":"👁️ Preview","어떤 도구가 필요하세요? 🛠️":"What tool do you need? 🛠️","거래처·고객 관리":"Contacts / CRM","연락처·메모·검색":"Contacts · notes · search","매출·지출 장부":"Sales & expense ledger","일별 합계·순이익":"Daily totals · net profit","재고 관리":"Inventory","수량·부족 알림":"Quantity · low-stock alerts","출퇴근 기록":"Attendance","근무시간 자동계산":"Auto work-hour calc","견적서·명세서":"Quotes & invoices","금액·부가세 자동":"Auto totals · VAT","할 일·진행 보드":"Task / Kanban board","칸반·마감일":"Kanban · due dates","회의록·메모":"Meeting notes","결정사항·검색":"Decisions · search","예약·일정":"Bookings & schedule","달력·오늘 예약":"Calendar · today","실무 계산기":"Work calculator","부가세·마진·할인":"VAT · margin · discount","✏️ 직접 말로 만들기":"✏️ Describe your own","🔍 크게":"🔍 Bigger","➕ 항목 추가":"➕ Add field","📊 엑셀 내보내기":"📊 Export Excel","🖨️ 인쇄":"🖨️ Print","🎨 색 바꾸기":"🎨 Change colors","실시간 미리보기":"Live preview","＋ 새로 만들기":"＋ New","📲 앱으로 설치 — 홈 화면에 추가":"📲 Install app — Add to Home Screen","⬇ 내려받기 — 오프라인 실행파일":"⬇ Download — offline app","아직 만든 도구가 없어요":"No tools yet","왼쪽에서 필요한 도구를 고르면":"Pick a tool on the left,","여기서 바로 만들어지고, 바로 써볼 수 있어요.":"and it appears here, ready to use.","코딩 몰라도 돼요.":"No coding needed.","업무에 필요한 도구를 말로 만들어 쓰세요.":"Build the tools you need just by describing them.","고르면":"Pick one","바로 완성":"Built instantly","내 도구함":"My Tools","저장":"saved","3회":"3 free","무료 체험":"trials","구글로 3초 만에 시작하기":"Start with Google","카카오로 시작하기":"Start with Kakao","🧪 베타 테스트 중 · 가입 즉시 3회 무료 체험":"🧪 In beta · 3 free trials on sign-up","카카오톡 안에서 열었다면 구글 로그인이 막힐 수 있어요. 그땐 카카오로 시작하거나, 메뉴 → 다른 브라우저로 열기를 눌러주세요.":"If opened inside KakaoTalk, Google login may be blocked. Use Kakao, or open in another browser from the menu.","이용약관":"Terms","개인정보처리방침":"Privacy Policy","환불·해지 정책":"Refund Policy","상호: 말로 · 대표자: 한호정 · 사업자등록번호: 489-07-03664 · 통신판매업: 신고 준비중":"Company: Mallo · CEO: Hojeong Han · Biz Reg. No.: 489-07-03664 · E-commerce: registration pending","사업장 소재지: 서울특별시 노원구 동일로237바길 17, 101동 202호 · 유선번호: 050-6544-3197 · 이메일: seanhh915@gmail.com":"Address: 17 Dongil-ro 237ba-gil, Nowon-gu, Seoul, Korea · Tel: 050-6544-3197 · Email: seanhh915@gmail.com","내 도구함 📂":"My Tools 📂","내가 만든 도구들이 자동 저장돼요. 언제든 다시 열고, 앱처럼 설치하거나 공유할 수 있어요.":"Your tools are saved automatically. Reopen, install, or share them anytime.","닫기":"Close","회원 탈퇴":"Delete account","의견을 들려주세요 💬":"Send us feedback 💬","말로는 지금 베타 테스트 중이에요. 좋았던 점·불편한 점·만들고 싶은 기능 뭐든 적어 주세요!":"Mallo is in beta. Tell us what you liked, what felt off, or features you want!","의견 보내기":"Send feedback","내 앱으로 내려받기 💻":"Download as an app 💻","지금 만든 도구를 윈도우·맥·리눅스에서 실행할 수 있는 앱으로 묶어 드려요.":"Package your tool as a Windows / Mac / Linux app.","Windows용 앱":"Windows app","ZIP 다운로드 · exe 실행":"ZIP download · run .exe","윈도우":"Windows","macOS용 앱 (Apple Silicon·M1 이상)":"macOS app (Apple Silicon · M1+)","ZIP 다운로드 · 앱 실행":"ZIP download · run app","맥":"Mac","macOS용 앱 (Intel)":"macOS app (Intel)","Linux용 앱":"Linux app","ZIP 다운로드 · AppImage 실행":"ZIP download · run AppImage","리눅스":"Linux","앱 파일을 준비하고 있어요… 잠시만 기다려 주세요.":"Preparing your app file… please wait.","내 도구":"My tool","나도 만들기":"Make your own","편집":"Edit","앱으로 설치":"Install app","완성했어요! 바로 써보세요. 입력한 내용은 자동 저장돼요. 아래 버튼이나 말로 고칠 수 있어요 😊":"Done! Try it now — your inputs save automatically. Edit with the buttons or just tell me 😊","고쳤어요! 오른쪽에서 확인해 보세요. 더 바꾸고 싶으면 아래 버튼이나 말로 알려주세요 😊":"Updated! Check the right side. Want more changes? Use the buttons or just tell me 😊","로그인이 필요해요":"Please log in","실시간으로 만들어지는 중...":"Building in real time...","먼저 도구를 만들어 주세요":"Make a tool first","앱을 먼저 만들어 주세요!":"Make a tool first!","아직 만든 도구가 없어요. 먼저 앱을 만들어 주세요!":"No tools yet — make one first!","요청을 이해하는 중":"Understanding your request","화면을 설계하는 중":"Designing the screen","기능을 만드는 중":"Building features","마무리 점검 중":"Final checks","공유 링크를 복사했어요! 붙여넣어 보내세요 🔗":"Share link copied! Paste to send 🔗","소중한 의견 감사해요! 🙏":"Thanks for your feedback! 🙏","도구를 열지 못했어요":"Couldn't open the tool","문제가 생겼어요. 다시 시도해 주세요.":"Something went wrong. Please try again.","결과를 만들지 못했어요. 조금 더 구체적으로 말씀해 주시겠어요?":"Couldn't generate a result. Could you be a bit more specific?","필요한 걸 한국말로 적으면 돼요 · 만든 뒤 \"글자 더 크게 해줘\"처럼 말로 고칠 수 있어요":"Describe what you need in plain words — then refine by saying e.g. make the text bigger.","예) 거래처 연락처 정리하는 표 만들어줘":"e.g. Make a table to organize client contacts","자유롭게 후기를 남겨 주세요 (예: 어떤 앱을 만들고 싶었는지, 아쉬운 점)":"Share your thoughts (e.g. what you wanted to build, what felt lacking)","만들기":"Make"});</script>
+</body>
+</html>
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>말로 — 말로 만드는 내 업무 도구</title>
+  <meta name="theme-color" content="#3182f6">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<script src="https://cdn.portone.io/v2/browser-sdk.js"></script>
+<style>
+  :root{
+    --bg:#f2f4f6; --card:#ffffff; --ink:#191f28; --sub:#6b7684; --line:#e5e8eb;
+    --blue:#3182f6; --blue-dark:#1b64da; --blue-bg:#e8f3ff;
+    --red:#f04452; --green:#04c75a;
+    --radius:16px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{font-family:Pretendard,-apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;background:var(--bg);color:var(--ink);overflow:hidden}
+  button{font-family:inherit;cursor:pointer;border:none;background:none}
+  input,textarea{font-family:inherit}
+
+  header{height:60px;background:var(--card);border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 20px;gap:14px}
+  .logo{font-size:22px;font-weight:800;letter-spacing:-0.5px}
+  .logo b{color:var(--blue)}
+  .tagline{font-size:13px;color:var(--sub)}
+  .spacer{flex:1}
+  .trial-badge{background:var(--blue-bg);color:var(--blue-dark);font-size:13px;font-weight:700;padding:7px 14px;border-radius:99px}
+  .trial-badge.expired{background:#ffeaec;color:var(--red)}
+  .hbtn{font-size:14px;font-weight:600;color:var(--sub);padding:8px 12px;border-radius:10px}
+  .hbtn:hover{background:var(--bg)}
+  .hbtn.primary{background:var(--blue);color:#fff}
+  .hbtn.primary:hover{background:var(--blue-dark)}
+
+  .main{display:flex;height:calc(100% - 60px)}
+  .left{width:420px;min-width:340px;display:flex;flex-direction:column;background:var(--card);border-right:1px solid var(--line)}
+  .right{flex:1;display:flex;flex-direction:column;background:#fff}
+
+  .chat{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:14px}
+  .msg{max-width:88%;padding:12px 16px;border-radius:18px;font-size:15px;line-height:1.55;white-space:pre-wrap;word-break:break-word}
+  .msg.user{align-self:flex-end;background:var(--blue);color:#fff;border-bottom-right-radius:6px}
+  .msg.bot{align-self:flex-start;background:var(--bg);border-bottom-left-radius:6px}
+  .msg.bot.err{background:#ffeaec;color:#c2273a}
+  .msg.bot.working .dots::after{content:'';animation:dots 1.4s infinite}
+  @keyframes dots{0%{content:''}25%{content:'.'}50%{content:'..'}75%{content:'...'}}
+
+  .welcome{padding:28px 20px 6px}
+  .welcome h2{font-size:21px;font-weight:800;letter-spacing:-0.4px;line-height:1.4}
+  .welcome p{font-size:14px;color:var(--sub);margin-top:8px;line-height:1.6}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;padding:14px 20px}
+  .chip{font-size:13.5px;font-weight:600;color:var(--blue-dark);background:var(--blue-bg);padding:9px 14px;border-radius:99px;transition:.15s}
+  .chip:hover{background:#d6e9ff;transform:translateY(-1px)}
+
+  /* 직무 도구 그리드 (시작 화면) */
+  .tools-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:14px 20px}
+  .tcard{display:flex;flex-direction:column;align-items:flex-start;gap:5px;background:var(--card);border:1.5px solid var(--line);border-radius:14px;padding:13px 14px;text-align:left;transition:.15s}
+  .tcard:hover{border-color:var(--blue);background:var(--blue-bg);transform:translateY(-1px)}
+  .tcard .ic{font-size:23px}
+  .tcard .nm{font-size:13.5px;font-weight:700;color:var(--ink);line-height:1.25}
+  .tcard .ds{font-size:11px;color:var(--sub);line-height:1.3}
+  .tcard.more{align-items:center;justify-content:center;border-style:dashed;color:var(--blue-dark);font-weight:700;font-size:13.5px;min-height:64px}
+
+  /* 내 도구함 목록 */
+  .tool-list{display:flex;flex-direction:column;gap:8px;margin-top:14px;max-height:52vh;overflow-y:auto}
+  .tool-item{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:12px;padding:11px 12px}
+  .ti-main{flex:1;min-width:0}
+  .ti-name{font-size:14.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ti-date{font-size:12px;color:var(--sub);margin-top:2px}
+  .ti-open{font-size:13px;font-weight:700;color:var(--blue);padding:7px 12px;border-radius:9px;background:var(--blue-bg)}
+  .ti-app,.ti-share{font-size:15px;padding:7px 8px;border-radius:9px}
+  .ti-app:hover,.ti-share:hover{background:var(--bg)}
+  .ti-del{font-size:12px;color:var(--sub);padding:7px 8px}
+
+  /* 도구 단독 뷰어(공유 링크·설치형 앱) */
+  .viewer{position:fixed;inset:0;z-index:300;background:#fff;display:none;flex-direction:column}
+  .viewer.on{display:flex}
+  .vbar{height:50px;flex-shrink:0;display:flex;align-items:center;gap:8px;padding:0 12px;border-bottom:1px solid var(--line);background:var(--card)}
+  .vbar .vlogo{font-size:16px;font-weight:800}
+  .vbar .vlogo b{color:var(--blue)}
+  .vbar .vtitle{flex:1;font-size:14px;font-weight:700;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .vbtn{font-size:13px;font-weight:700;padding:8px 12px;border-radius:10px;white-space:nowrap}
+  .vbtn.prim{background:var(--blue);color:#fff}
+  .vbtn.ghost{color:var(--sub);background:var(--bg)}
+  .viewer iframe{flex:1;width:100%;border:none;background:#fff}
+
+  .inputbar{padding:14px 16px 18px;border-top:1px solid var(--line)}
+  .inputbox{display:flex;align-items:flex-end;gap:8px;background:var(--bg);border-radius:var(--radius);padding:10px 10px 10px 16px;border:2px solid transparent;transition:.15s}
+  .inputbox:focus-within{border-color:var(--blue);background:#fff}
+  .inputbox textarea{flex:1;border:none;outline:none;background:transparent;resize:none;font-size:15px;line-height:1.5;max-height:120px;color:var(--ink)}
+  .send{width:40px;height:40px;border-radius:12px;background:var(--blue);color:#fff;font-size:17px;flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:.15s}
+  .send:hover{background:var(--blue-dark)}
+  .send:disabled{background:#c9d2dc;cursor:not-allowed}
+  .hint{font-size:12px;color:#8b95a1;margin-top:8px;text-align:center}
+
+  .preview-head{height:48px;display:flex;align-items:center;gap:10px;padding:0 16px;border-bottom:1px solid var(--line);background:#fafbfc}
+  .live-dot{width:8px;height:8px;border-radius:50%;background:#c9d2dc}
+  .live-dot.on{background:var(--green);box-shadow:0 0 0 4px rgba(4,199,90,.15);animation:pulse 1.2s infinite}
+  @keyframes pulse{50%{box-shadow:0 0 0 7px rgba(4,199,90,.08)}}
+  .preview-title{font-size:14px;font-weight:700;color:var(--sub)}
+  .pbtn{font-size:13px;font-weight:600;color:var(--sub);padding:6px 12px;border-radius:8px;border:1px solid var(--line);background:#fff}
+  .pbtn:hover{background:var(--bg)}
+  .pbtn.go{background:var(--blue);color:#fff;border-color:var(--blue);font-weight:700}
+  .pbtn.go:hover{background:var(--blue-dark)}
+  .preview-wrap{flex:1;position:relative;background:repeating-conic-gradient(#f7f8fa 0% 25%, #fff 0% 50%) 0 0/24px 24px}
+  iframe{width:100%;height:100%;border:none;background:#fff}
+  .empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#fff}
+  .empty .big{font-size:52px}
+  .empty h3{font-size:19px;font-weight:800;letter-spacing:-0.3px}
+  .empty p{font-size:14px;color:var(--sub);text-align:center;line-height:1.7}
+
+  .overlay{position:fixed;inset:0;background:rgba(25,31,40,.55);display:flex;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(2px)}
+  .modal{background:#fff;border-radius:24px;padding:32px;width:min(440px,92vw);max-height:88vh;overflow-y:auto;box-shadow:0 24px 60px rgba(0,0,0,.2)}
+  .modal h2{font-size:22px;font-weight:800;letter-spacing:-0.4px}
+  .modal .sub{font-size:14px;color:var(--sub);margin-top:8px;line-height:1.6}
+  .bigbtn{width:100%;margin-top:20px;padding:15px;border-radius:14px;background:var(--blue);color:#fff;font-size:16px;font-weight:700;transition:.15s}
+  .bigbtn:hover{background:var(--blue-dark)}
+  .bigbtn.gray{background:var(--bg);color:var(--sub);margin-top:10px}
+  .bigbtn.google{background:#fff;color:var(--ink);border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center;gap:10px}
+  .bigbtn.google:hover{background:var(--bg)}
+
+  /* 로그인 화면 */
+  .login-hero{text-align:center;padding:8px 0 4px}
+  .login-hero .biglogo{font-size:44px;font-weight:800;letter-spacing:-1px}
+  .login-hero .biglogo b{color:var(--blue)}
+  .login-hero p{font-size:15px;color:var(--sub);margin-top:10px;line-height:1.7}
+  .login-feats{display:flex;gap:8px;margin-top:22px}
+  .lfeat{flex:1;background:var(--bg);border-radius:14px;padding:14px 8px;text-align:center}
+  .lfeat .ic{font-size:22px}
+  .lfeat .tx{font-size:12.5px;font-weight:600;color:var(--sub);margin-top:6px;line-height:1.4}
+
+  .price{text-align:center;margin:22px 0}
+  .price .won{font-size:40px;font-weight:800;letter-spacing:-1px}
+  .price .per{font-size:15px;color:var(--sub);font-weight:600}
+  .feat{list-style:none;margin-top:4px}
+  .feat li{font-size:14.5px;padding:9px 0;display:flex;gap:10px;align-items:center;border-bottom:1px solid #f4f5f7}
+  .feat li::before{content:'✓';color:var(--green);font-weight:800}
+
+  /* 구독 플랜 선택 */
+  .planbox{display:flex;flex-direction:column;gap:9px;margin-top:18px}
+  .plan{display:flex;align-items:center;justify-content:space-between;gap:10px;border:1.5px solid var(--line);border-radius:14px;padding:13px 16px;text-align:left;transition:.15s}
+  .plan:hover{border-color:var(--blue);background:var(--blue-bg);transform:translateY(-1px)}
+  .plan .pn{font-size:15px;font-weight:800;color:var(--ink)}
+  .plan .pd{font-size:12px;color:var(--sub);margin-top:2px}
+  .plan .pv{font-size:16px;font-weight:800;color:var(--blue);white-space:nowrap}
+  .plan.best{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-bg)}
+  .plan .badge{font-size:10px;font-weight:800;color:#fff;background:var(--blue);border-radius:6px;padding:2px 6px;margin-left:6px;vertical-align:middle}
+
+  .toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(80px);background:#191f28;color:#fff;font-size:14px;font-weight:600;padding:13px 22px;border-radius:99px;z-index:200;opacity:0;transition:.3s}
+  .toast.show{transform:translateX(-50%) translateY(0);opacity:1}
+  .hidden{display:none !important}
+
+  /* ===== 모바일 탭 전환 바 ===== */
+  .mtabs{display:none}
+
+  /* ===== 모바일 반응형 ===== */
+  @media (max-width:768px){
+    header{padding:0 14px;gap:10px}
+    .tagline{display:none}
+    .logo{font-size:20px}
+    .trial-badge{font-size:11.5px;padding:6px 9px;white-space:nowrap}
+    .hbtn{padding:7px 9px;font-size:13px;white-space:nowrap}
+    .hbtn.primary{padding:7px 11px}
+
+    .mtabs{display:flex;height:46px;background:var(--card);border-bottom:1px solid var(--line);flex-shrink:0}
+    .mtab{flex:1;font-size:14.5px;font-weight:700;color:var(--sub);border-bottom:2px solid transparent;display:flex;align-items:center;justify-content:center;gap:6px}
+    .mtab.active{color:var(--blue);border-bottom-color:var(--blue)}
+
+    .main{flex-direction:column;height:calc(100% - 60px - 46px)}
+    .left{width:100%;min-width:0;border-right:none;height:100%}
+    .right{height:100%}
+    .main:not(.preview) .right{display:none}
+    .main.preview .left{display:none}
+
+    .welcome{padding:22px 18px 4px}
+    .welcome h2{font-size:19px}
+    .welcome p{font-size:13.5px}
+    .chips{padding:12px 18px}
+    .tools-grid{padding:12px 16px;gap:8px}
+
+    .preview-title{display:none}
+    .preview-head{padding:0 12px;gap:8px}
+    .pbtn{padding:7px 10px;font-size:12.5px;white-space:nowrap}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">말<b>로</b></div>
+  <div class="tagline">말로 만드는 내 업무 도구</div>
+  <div class="spacer"></div>
+  <div class="trial-badge hidden" id="trialBadge"></div>
+  <button class="hbtn hidden" id="btnMyTools">📂 내 도구함</button>
+  <button class="hbtn primary hidden" id="btnFeedback">💬 피드백</button>
+  <button class="hbtn hidden" id="btnLogout">로그아웃</button>
+</header>
+
+<div class="mtabs" id="mtabs">
+  <button class="mtab active" data-pane="make">✏️ 만들기</button>
+  <button class="mtab" data-pane="preview">👁️ 미리보기</button>
+</div>
+
+<div class="main" id="mainEl">
+  <div class="left">
+    <div class="welcome" id="welcome">
+      <h2>어떤 도구가 필요하세요? 🛠️</h2>
+      <p>아래에서 고르면 <b>바로 만들어 드려요.</b> 누르기만 하면 끝 — 만든 뒤엔 말로 고치고, 입력한 내용은 자동으로 저장돼요.</p>
+    </div>
+    <div class="tools-grid" id="chips">
+      <button class="tcard" data-prompt="거래처·고객 연락처를 관리하는 프로그램 만들어줘. 이름·회사·연락처·이메일·메모를 등록하고, 표로 목록 보기, 이름/회사 검색, 추가·수정·삭제, 엑셀(CSV) 내보내기. 한국어 샘플 6개 채워줘. 입력한 내용은 저장돼서 다시 열어도 남아 있게."><span class="ic">👥</span><span class="nm">거래처·고객 관리</span><span class="ds">연락처·메모·검색</span></button>
+      <button class="tcard" data-prompt="가게 일일 매출·지출 장부 프로그램 만들어줘. 날짜·구분(매출/지출)·내용·금액 입력, 목록 표, 날짜별/이번 달 합계와 순이익 요약, 검색, 추가·수정·삭제, 엑셀(CSV) 내보내기. 한국어 샘플 데이터 채워줘. 입력 내용은 저장되게."><span class="ic">💰</span><span class="nm">매출·지출 장부</span><span class="ds">일별 합계·순이익</span></button>
+      <button class="tcard" data-prompt="재고 관리 프로그램 만들어줘. 상품명·분류·수량·단가 등록, 목록 표와 검색, 수량 +/- 버튼, 재고 5개 이하 빨간 표시, 총 재고 수량·금액 요약, 추가·수정·삭제, CSV 내보내기. 한국어 샘플 채워줘. 저장되게."><span class="ic">📦</span><span class="nm">재고 관리</span><span class="ds">수량·부족 알림</span></button>
+      <button class="tcard" data-prompt="직원 출퇴근(근태) 기록 프로그램 만들어줘. 직원 이름 선택, 출근/퇴근 버튼으로 시간 자동 기록, 날짜별 목록, 근무시간 자동 계산, 이번 달 직원별 합계, 검색, 수정·삭제, CSV 내보내기. 한국어 샘플 채워줘. 저장되게."><span class="ic">🕘</span><span class="nm">출퇴근 기록</span><span class="ds">근무시간 자동계산</span></button>
+      <button class="tcard" data-prompt="견적서·거래명세서를 만드는 프로그램 만들어줘. 상호·연락처 등 우리 정보와 받는 곳 정보 입력, 품목(이름·수량·단가) 여러 줄 추가, 공급가·부가세(10%)·합계 자동 계산, 깔끔한 견적서 형태로 보기, 인쇄 버튼. 한국어 샘플 채워줘. 입력 내용 저장되게."><span class="ic">🧾</span><span class="nm">견적서·명세서</span><span class="ds">금액·부가세 자동</span></button>
+      <button class="tcard" data-prompt="업무 할 일·진행 상황 보드 만들어줘. 할 일/진행 중/완료 3개 칸, 카드 추가, 칸 사이 이동 버튼(또는 드래그), 마감일·담당자 표시, 완료 개수 요약, 추가·수정·삭제. 한국어 샘플 카드 채워줘. 저장되게."><span class="ic">✅</span><span class="nm">할 일·진행 보드</span><span class="ds">칸반·마감일</span></button>
+      <button class="tcard" data-prompt="회의록·업무 메모 정리 프로그램 만들어줘. 제목·날짜·참석자·내용·결정사항/할일을 기록, 목록과 검색, 클릭하면 상세 보기, 추가·수정·삭제, 텍스트로 복사 버튼. 한국어 샘플 채워줘. 저장되게."><span class="ic">📝</span><span class="nm">회의록·메모</span><span class="ds">결정사항·검색</span></button>
+      <button class="tcard" data-prompt="예약·일정 관리 프로그램 만들어줘. 날짜·시간·고객명·연락처·메모로 예약 등록, 날짜별 목록과 달력 보기, 오늘 예약 강조, 검색, 추가·수정·삭제, CSV 내보내기. 한국어 샘플 채워줘. 저장되게."><span class="ic">📅</span><span class="nm">예약·일정</span><span class="ds">달력·오늘 예약</span></button>
+      <button class="tcard" data-prompt="실무용 계산기 프로그램 만들어줘. 부가세(공급가↔합계), 마진율·판매가, 할인가 계산을 탭으로 전환해서 쓸 수 있게. 입력하면 즉시 계산 결과 표시, 큰 글씨로 보기 쉽게. 한국어로."><span class="ic">🧮</span><span class="nm">실무 계산기</span><span class="ds">부가세·마진·할인</span></button>
+      <button class="tcard more" id="tcMore">✏️ 직접 말로 만들기</button>
+    </div>
+    <div class="chips hidden" id="editChips">
+      <button class="chip" data-edit="글자랑 버튼을 더 크고 보기 쉽게 키워줘">🔍 크게</button>
+      <button class="chip" data-edit="입력 항목(칸)을 하나 더 추가해줘">➕ 항목 추가</button>
+      <button class="chip" data-edit="엑셀(CSV)로 내보내는 버튼을 추가해줘">📊 엑셀 내보내기</button>
+      <button class="chip" data-edit="인쇄하기 버튼을 추가해줘">🖨️ 인쇄</button>
+      <button class="chip" data-edit="색을 더 밝고 깔끔하게 바꿔줘">🎨 색 바꾸기</button>
+    </div>
+    <div class="chat" id="chat"></div>
+    <div class="inputbar">
+      <div class="inputbox">
+        <textarea id="input" rows="1" placeholder="예) 거래처 연락처 정리하는 표 만들어줘"></textarea>
+        <button class="send" id="btnSend" title="만들기">↑</button>
+      </div>
+      <div class="hint">필요한 걸 한국말로 적으면 돼요 · 만든 뒤 "글자 더 크게 해줘"처럼 말로 고칠 수 있어요</div>
+    </div>
+  </div>
+
+  <div class="right">
+    <div class="preview-head">
+      <div class="live-dot" id="liveDot"></div>
+      <div class="preview-title" id="previewTitle">실시간 미리보기</div>
+      <div class="spacer"></div>
+      <button class="pbtn" id="btnNew">＋ 새로 만들기</button>
+      <button class="pbtn go hidden" id="btnInstallApp">📲 앱으로 설치 — 홈 화면에 추가</button>
+      <button class="pbtn" id="btnDownload">⬇ 내려받기 — 오프라인 실행파일</button>
+    </div>
+    <div class="preview-wrap">
+      <iframe id="frame" sandbox="allow-scripts allow-modals allow-forms allow-popups"></iframe>
+      <div class="empty" id="empty">
+        <div class="big">🛠️</div>
+        <h3>아직 만든 도구가 없어요</h3>
+        <p>왼쪽에서 필요한 도구를 고르면<br>여기서 바로 만들어지고, 바로 써볼 수 있어요.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 로그인 모달 -->
+<div class="overlay" id="loginModal">
+  <div class="modal">
+    <div class="login-hero">
+      <div class="biglogo">말<b>로</b></div>
+      <p>코딩 몰라도 돼요.<br>업무에 필요한 도구를 말로 만들어 쓰세요.</p>
+    </div>
+    <div class="login-feats">
+      <div class="lfeat"><div class="ic">🖱️</div><div class="tx">고르면<br>바로 완성</div></div>
+      <div class="lfeat"><div class="ic">💾</div><div class="tx">내 도구함<br>저장</div></div>
+      <div class="lfeat"><div class="ic">🎁</div><div class="tx">3회<br>무료 체험</div></div>
+    </div>
+    <button class="bigbtn google" id="btnGoogle">
+      <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3l5.7-5.7C34.3 6.1 29.4 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.6-.4-3.9z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 15.1 18.9 12 24 12c3.1 0 5.9 1.2 8 3l5.7-5.7C34.3 6.1 29.4 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.3 0-9.7-3.4-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C36.9 39.2 44 34 44 24c0-1.3-.1-2.6-.4-3.9z"/></svg>
+      구글로 3초 만에 시작하기
+    </button>
+    <button class="bigbtn" id="btnKakao" style="background:#FEE500;color:#191600;margin-top:10px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:8px">
+      <span style="font-size:18px">💬</span> 카카오로 시작하기
+    </button>
+    <p class="sub" style="text-align:center;margin-top:14px">🧪 베타 테스트 중 · 가입 즉시 3회 무료 체험</p>
+    <p class="sub" style="text-align:center;margin-top:6px;font-size:12.5px;color:#8b95a1">카카오톡 안에서 열었다면 구글 로그인이 막힐 수 있어요. 그땐 카카오로 시작하거나, 메뉴 → 다른 브라우저로 열기를 눌러주세요.</p>
+    <p class="sub" style="text-align:center;margin-top:10px;font-size:12px;color:#8b95a1">로그인 시 <a href="/terms.html" target="_blank" style="color:#6b7684">이용약관</a> · <a href="/privacy.html" target="_blank" style="color:#6b7684">개인정보처리방침</a> · <a href="/refund.html" target="_blank" style="color:#6b7684">환불·해지 정책</a>에 동의하게 됩니다.</p>
+    <div style="margin-top:16px;padding-top:12px;border-top:1px solid #eef1f4;text-align:center;font-size:10.5px;line-height:1.6;color:#b0b8c1">
+      상호: 말로 · 대표자: 한호정 · 사업자등록번호: 489-07-03664 · 통신판매업: 신고 준비중<br>
+      사업장 소재지: 서울특별시 노원구 동일로237바길 17, 101동 202호 · 유선번호: 050-6544-3197 · 이메일: seanhh915@gmail.com<br>
+      <a href="/terms.html" target="_blank" style="color:#b0b8c1">이용약관</a> · <a href="/refund.html" target="_blank" style="color:#b0b8c1">환불·해지 정책</a> · <a href="/privacy.html" target="_blank" style="color:#b0b8c1">개인정보처리방침</a>
+    </div>
+  </div>
+</div>
+
+<!-- 베타 안내 + 피드백 모달 -->
+<div class="overlay hidden" id="fbModal">
+  <div class="modal">
+    <h2 id="fbTitle">의견을 들려주세요 💬</h2>
+    <p class="sub" id="fbSub">말로는 지금 베타 테스트 중이에요. 좋았던 점·불편한 점·만들고 싶은 기능 뭐든 적어 주세요!</p>
+    <div id="fbStars" style="display:flex;gap:8px;justify-content:center;margin:20px 0 14px;font-size:32px;line-height:1">
+      <span class="star" data-v="1" style="cursor:pointer;color:#d6dce3">★</span>
+      <span class="star" data-v="2" style="cursor:pointer;color:#d6dce3">★</span>
+      <span class="star" data-v="3" style="cursor:pointer;color:#d6dce3">★</span>
+      <span class="star" data-v="4" style="cursor:pointer;color:#d6dce3">★</span>
+      <span class="star" data-v="5" style="cursor:pointer;color:#d6dce3">★</span>
+    </div>
+    <textarea id="fbText" rows="4" placeholder="자유롭게 후기를 남겨 주세요 (예: 어떤 앱을 만들고 싶었는지, 아쉬운 점)" style="width:100%;border:2px solid var(--line);border-radius:12px;padding:12px 14px;font-size:15px;font-family:inherit;line-height:1.5;resize:none;outline:none;box-sizing:border-box"></textarea>
+    <div class="planbox hidden" id="planBox"></div>
+    <button class="bigbtn" id="btnFbSend">의견 보내기</button>
+    <button class="bigbtn gray" id="btnFbClose">닫기</button>
+  </div>
+</div>
+
+<!-- 내 도구함 모달 -->
+<div class="overlay hidden" id="toolsModal">
+  <div class="modal">
+    <h2>내 도구함 📂</h2>
+    <p class="sub">내가 만든 도구들이 자동 저장돼요. 언제든 다시 열고, 앱처럼 설치하거나 공유할 수 있어요.</p>
+    <div class="tool-list" id="toolList"></div>
+    <button class="bigbtn gray" id="btnToolsClose">닫기</button>
+    <button class="bigbtn gray" id="btnDeleteAcct" style="margin-top:10px;color:#f04452;background:#fff;border:1px solid #ffdde2;font-size:13px">회원 탈퇴</button>
+  </div>
+</div>
+
+<!-- OS별 앱 다운로드 모달 -->
+<div class="overlay hidden" id="dlModal">
+  <div class="modal">
+    <h2>내 앱으로 내려받기 💻</h2>
+    <p class="sub">지금 만든 도구를 윈도우·맥·리눅스에서 실행할 수 있는 앱으로 묶어 드려요.</p>
+    <div id="dlOsBox" style="display:flex;flex-direction:column;gap:9px;margin-top:18px">
+      <button class="plan dlos" data-os="windows"><div><div class="pn">Windows용 앱</div><div class="pd">ZIP 다운로드 · exe 실행</div></div><div class="pv">윈도우</div></button>
+      <button class="plan dlos" data-os="mac-arm"><div><div class="pn">macOS용 앱 (Apple Silicon·M1 이상)</div><div class="pd">ZIP 다운로드 · 앱 실행</div></div><div class="pv">맥</div></button>
+      <button class="plan dlos" data-os="mac-x64"><div><div class="pn">macOS용 앱 (Intel)</div><div class="pd">ZIP 다운로드 · 앱 실행</div></div><div class="pv">맥</div></button>
+      <button class="plan dlos" data-os="linux"><div><div class="pn">Linux용 앱</div><div class="pd">ZIP 다운로드 · AppImage 실행</div></div><div class="pv">리눅스</div></button>
+    </div>
+    <div id="dlProgress" style="display:none;margin-top:20px;padding:18px;border-radius:14px;background:var(--bg);text-align:center;color:var(--sub);font-size:14px;font-weight:600">
+      앱 파일을 준비하고 있어요… 잠시만 기다려 주세요.
+    </div>
+    <button class="bigbtn gray" id="dlClose">닫기</button>
+  </div>
+</div>
+
+<!-- 도구 단독 뷰어 -->
+<div class="viewer" id="viewer">
+  <div class="vbar">
+    <div class="vlogo">말<b>로</b></div>
+    <div class="vtitle" id="vTitle">내 도구</div>
+    <button class="vbtn ghost" id="vMake">나도 만들기</button>
+    <button class="vbtn ghost hidden" id="vEdit">편집</button>
+    <button class="vbtn prim" id="vInstall">앱으로 설치</button>
+  </div>
+  <iframe id="vframe" sandbox="allow-scripts allow-modals allow-forms allow-popups"></iframe>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const $ = id => document.getElementById(id);
+const { createClient } = supabase;
+
+const S = {
+  session:null, supabase:null, me:null, cfg:null, busy:false, loggedTracked:false,
+  code:'', codeHistory:false, currentToolId:null, toolData:{}, viewerId:null, viewerOwner:false,
+  payBusy:false, fbRating:0
+};
+const WORKING_STEPS = ['요청을 이해하는 중', '화면을 설계하는 중', '기능을 만드는 중', '마무리 점검 중'];
+function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2600); }
+function addMsg(role, text, cls=''){
+  const el=document.createElement('div'); el.className='msg '+role+(cls?' '+cls:''); el.textContent=text; $('chat').appendChild(el); $('chat').scrollTop=$('chat').scrollHeight; return el;
+}
+
+/* ================== 모바일 탭 ================== */
+const mq = window.matchMedia('(max-width:768px)');
+function setPane(p){
+  $('mainEl').classList.toggle('preview', p==='preview');
+  document.querySelectorAll('.mtab').forEach(b=>b.classList.toggle('active', b.dataset.pane===p));
+}
+$('mtabs').addEventListener('click', e=>{ const b=e.target.closest('.mtab'); if(b) setPane(b.dataset.pane); });
+
+/* ================== 생성 코드 ↔ 미리보기 데이터 저장 shim ================== */
+function withShim(html, seed){
+  const seedJson = JSON.stringify(seed || {}).replace(/<\/script/gi, '<\\/script');
   const shim = `<script>\n(function(){\n  const SEED=${seedJson};\n  const KEY='__mallo_internal__';\n  const listeners=[];\n  const memory={};\n  function post(){ try{ parent.postMessage({__mallo:'data',data:memory},'*'); }catch(e){} }\n  function patch(){\n    const rawSet=localStorage.setItem.bind(localStorage), rawGet=localStorage.getItem.bind(localStorage), rawRemove=localStorage.removeItem.bind(localStorage);\n    localStorage.setItem=function(k,v){ memory[k]=v; post(); try{return rawSet(k,v)}catch(e){} };\n    localStorage.getItem=function(k){ if(Object.prototype.hasOwnProperty.call(memory,k)) return memory[k]; try{return rawGet(k)}catch(e){return null} };\n    localStorage.removeItem=function(k){ delete memory[k]; post(); try{return rawRemove(k)}catch(e){} };\n  }\n  try{ Object.assign(memory, SEED||{}); patch(); }catch(e){}\n  window.말로 = window.말로 || {}; window.mallo = window.mallo || window.말로;\n  window.말로.ai = window.mallo.ai = function(prompt){\n    return new Promise((resolve,reject)=>{\n      const id=Math.random().toString(36).slice(2);\n      listeners[id]={resolve,reject};\n      parent.postMessage({__mallo:'ai',id,prompt:String(prompt||'')},'*');\n      setTimeout(()=>{ if(listeners[id]){ delete listeners[id]; reject(new Error('AI 응답 시간이 초과됐어요')); }},30000);\n    });\n  };\n  window.addEventListener('message',e=>{ const d=e.data; if(d&&d.__mallo==='ai_result'&&listeners[d.id]){ const l=listeners[d.id]; delete listeners[d.id]; d.error?l.reject(new Error(d.error)):l.resolve(d.text||''); } });\n})();\n<\/script>`;
   if(/<head[^>]*>/i.test(html)) return html.replace(/<head[^>]*>/i, m => m + shim);
   return shim + html;
