@@ -378,7 +378,7 @@ $('mtabs').addEventListener('click', e=>{ const b=e.target.closest('.mtab'); if(
 /* ================== 생성 코드 ↔ 미리보기 데이터 저장 shim ================== */
 function withShim(html, seed){
   const seedJson = JSON.stringify(seed || {}).replace(/<\/script/gi, '<\\/script');
-  const shim = `<script>\n(function(){\n  const SEED=${seedJson};\n  const KEY='__mallo_internal__';\n  const listeners=[];\n  const memory={};\n  function post(){ try{ parent.postMessage({__mallo:'data',data:memory},'*'); }catch(e){} }\n  function patch(){\n    const rawSet=localStorage.setItem.bind(localStorage), rawGet=localStorage.getItem.bind(localStorage), rawRemove=localStorage.removeItem.bind(localStorage);\n    localStorage.setItem=function(k,v){ memory[k]=v; post(); try{return rawSet(k,v)}catch(e){} };\n    localStorage.getItem=function(k){ if(Object.prototype.hasOwnProperty.call(memory,k)) return memory[k]; try{return rawGet(k)}catch(e){return null} };\n    localStorage.removeItem=function(k){ delete memory[k]; post(); try{return rawRemove(k)}catch(e){} };\n  }\n  try{ Object.assign(memory, SEED||{}); patch(); }catch(e){}\n  window.말로 = window.말로 || {}; window.mallo = window.mallo || window.말로; window.말로.fetch = window.mallo.fetch = function(url,opts){ return new Promise((resolve,reject)=>{ const id=Math.random().toString(36).slice(2); listeners[id]={resolve,reject}; parent.postMessage({__mallo:'proxy',id,url:String(url||''),opts:opts||{}},'*'); setTimeout(()=>{ if(listeners[id]){ delete listeners[id]; reject(new Error('요청 시간이 초과됐어요')); }},30000); }); };\n  window.말로.ai = window.mallo.ai = function(prompt){\n    return new Promise((resolve,reject)=>{\n      const id=Math.random().toString(36).slice(2);\n      listeners[id]={resolve,reject};\n      parent.postMessage({__mallo:'ai',id,prompt:String(prompt||'')},'*');\n      setTimeout(()=>{ if(listeners[id]){ delete listeners[id]; reject(new Error('AI 응답 시간이 초과됐어요')); }},30000);\n    });\n  };\n  window.addEventListener('message',e=>{ const d=e.data; if(d&&(d.__mallo==='ai_result'||d.__mallo==='proxy_result')&&listeners[d.id]){ const l=listeners[d.id]; delete listeners[d.id]; d.error?l.reject(new Error(d.error)):l.resolve(d.__mallo==='proxy_result'?d.result:(d.text||'')); } });\n})();\n<\/script>`;
+  const shim = `<script>\n(function(){\n  const SEED=${seedJson};\n  const KEY='__mallo_internal__';\n  const listeners=[];\n  const memory={};\n  function post(){ try{ parent.postMessage({__mallo:'data',data:memory},'*'); }catch(e){} }\n  function patch(){\n    const rawSet=localStorage.setItem.bind(localStorage), rawGet=localStorage.getItem.bind(localStorage), rawRemove=localStorage.removeItem.bind(localStorage);\n    localStorage.setItem=function(k,v){ memory[k]=v; post(); try{return rawSet(k,v)}catch(e){} };\n    localStorage.getItem=function(k){ if(Object.prototype.hasOwnProperty.call(memory,k)) return memory[k]; try{return rawGet(k)}catch(e){return null} };\n    localStorage.removeItem=function(k){ delete memory[k]; post(); try{return rawRemove(k)}catch(e){} };\n  }\n  try{ Object.assign(memory, SEED||{}); patch(); }catch(e){}\n  window.말로 = window.말로 || {}; window.mallo = window.mallo || window.말로;\n  window.말로.ai = window.mallo.ai = function(prompt){\n    return new Promise((resolve,reject)=>{\n      const id=Math.random().toString(36).slice(2);\n      listeners[id]={resolve,reject};\n      parent.postMessage({__mallo:'ai',id,prompt:String(prompt||'')},'*');\n      setTimeout(()=>{ if(listeners[id]){ delete listeners[id]; reject(new Error('AI 응답 시간이 초과됐어요')); }},30000);\n    });\n  };\n  window.addEventListener('message',e=>{ const d=e.data; if(d&&d.__mallo==='ai_result'&&listeners[d.id]){ const l=listeners[d.id]; delete listeners[d.id]; d.error?l.reject(new Error(d.error)):l.resolve(d.text||''); } });\n})();\n<\/script>`;
   if(/<head[^>]*>/i.test(html)) return html.replace(/<head[^>]*>/i, m => m + shim);
   return shim + html;
 }
@@ -403,7 +403,6 @@ function renderPreview(html, force=false){
 window.addEventListener('message', (e)=>{
   const d = e.data;
   if(d && d.__mallo === 'ai'){ handleAiRequest(e.source, d.id, d.prompt); return; }
-  if(d && d.__mallo === 'proxy'){ handleProxyRequest(e.source, d.id, d.url, d.opts); return; }
   if(!(d && d.__mallo === 'data' && d.data)) return;
   S.toolData = d.data;
   if(S.currentToolId && S.session){
@@ -416,16 +415,6 @@ window.addEventListener('message', (e)=>{
     try{ localStorage.setItem('mallo_tool_' + S.viewerId, JSON.stringify(S.toolData)); }catch(e){}
   }
 });
-async function handleProxyRequest(source, id, url, opts){
-  try{
-    const res = await fetch('/api/proxy', { method:'POST', headers:{ 'content-type':'application/json', authorization:'Bearer ' + S.session.access_token }, body: JSON.stringify({ url: url, method:(opts&&opts.method)||'GET', headers:(opts&&opts.headers)||{}, body:(opts&&opts.body)||null }) });
-    const j = await res.json();
-    if(!res.ok){ source.postMessage({__mallo:'proxy_result', id, error:j.error||'요청에 실패했어요'}, '*'); return; }
-    let parsed = j.body;
-    try{ if((j.contentType||'').indexOf('json')!==-1) parsed = JSON.parse(j.body); }catch(e){}
-    source.postMessage({__mallo:'proxy_result', id, result:{ status:j.status, contentType:j.contentType, data:parsed, raw:j.body }}, '*');
-  }catch(e){ source.postMessage({__mallo:'proxy_result', id, error:e.message||'요청에 실패했어요'}, '*'); }
-}
 async function handleAiRequest(source, id, prompt){
   try{
     if(!S.session) throw new Error('로그인이 필요해요');
