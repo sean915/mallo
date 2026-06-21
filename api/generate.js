@@ -252,7 +252,7 @@ export default async function handler(req) {
   // 2. 요청 검증
   let body;
   try { body = await req.json(); } catch { return json({ error: '요청 형식이 잘못됐어요' }, 400); }
-  const { prompt, code } = body || {};
+  const { prompt, code, lang } = body || {};
   if (!prompt || typeof prompt !== 'string' || prompt.length > 4000) {
     return json({ error: '요청 내용을 확인해 주세요 (최대 4000자)' }, 400);
   }
@@ -285,6 +285,7 @@ export default async function handler(req) {
   // 4. 프롬프트 정제: 사용자 원문을 서버 내부에서 제작 지시서로 바꾼 뒤 실제 생성 모델에 전달.
   const spec = await boostPrompt(prompt, !!code);
   const userPrompt = buildUserPrompt(prompt, code, spec);
+  const sysPrompt = (lang === 'en') ? SYSTEM_PROMPT + ' [OUTPUT LANGUAGE: ENGLISH — TOP PRIORITY] The user is an English speaker. Generate the ENTIRE tool in natural fluent English: every UI label, heading, button, placeholder, message, empty state, and ALL sample data must be in English. Use $ (USD) as the default currency and MM/DD/YYYY date format. Never output Korean. This overrides any earlier instruction about writing in Korean.' : SYSTEM_PROMPT;
 
   // 5. LLM 호출 (서버 환경변수의 키 사용 — 클라이언트는 모름)
   // 공급자별 요청 빌더 — 1차(유료·고품질)와 폴백(무료) 양쪽에 재사용
@@ -296,7 +297,7 @@ export default async function handler(req) {
           method: 'POST',
           headers: { 'content-type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
           // 시스템 프롬프트를 프롬프트 캐싱(ephemeral)으로 — 매 호출 동일하므로 캐시 적중 시 입력비 ~90%↓ + TTFT↑
-        body: JSON.stringify({ model: modelName, max_tokens: Number(env('MAX_TOKENS', '16000')), stream: true, system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }], messages: [{ role: 'user', content: userPrompt }] }),
+        body: JSON.stringify({ model: modelName, max_tokens: Number(env('MAX_TOKENS', '16000')), stream: true, system: [{ type: 'text', text: sysPrompt, cache_control: { type: 'ephemeral' } }], messages: [{ role: 'user', content: userPrompt }] }),
         },
         extract: (j) => (j.type === 'content_block_delta' ? j.delta?.text : null),
       };
@@ -307,7 +308,7 @@ export default async function handler(req) {
         options: {
           method: 'POST',
           headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
-          body: JSON.stringify({ model: modelName, stream: true, messages: [{ role: 'system', content: SYSTEM_PROMPT }, { role: 'user', content: userPrompt }] }),
+          body: JSON.stringify({ model: modelName, stream: true, messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: userPrompt }] }),
         },
         extract: (j) => j.choices?.[0]?.delta?.content ?? null,
       };
@@ -318,7 +319,7 @@ export default async function handler(req) {
       options: {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] }, contents: [{ role: 'user', parts: [{ text: userPrompt }] }], generationConfig: { thinkingConfig: { thinkingBudget: 0 }, maxOutputTokens: 8192 } }),
+        body: JSON.stringify({ systemInstruction: { parts: [{ text: sysPrompt }] }, contents: [{ role: 'user', parts: [{ text: userPrompt }] }], generationConfig: { thinkingConfig: { thinkingBudget: 0 }, maxOutputTokens: 8192 } }),
       },
       extract: (j) => {
         const parts = j.candidates?.[0]?.content?.parts;
