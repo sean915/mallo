@@ -731,7 +731,7 @@ async function generate(req){
         'content-type':'application/json',
         authorization:`Bearer ${S.session.access_token}`
       },
-      body: JSON.stringify({ prompt:req, code:S.code || undefined })
+      body: JSON.stringify({ prompt:req, code:S.code || undefined, lang:(localStorage.getItem('mallo_lang')||'ko') })
     });
 
     if(!res.ok){
