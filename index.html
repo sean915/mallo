@@ -602,6 +602,20 @@ $('btnGoogle').onclick = ()=> S.supabase.auth.signInWithOAuth({
   provider:'google',
   options:{ redirectTo: location.origin }
 });
+(function(){try{
+  var modal=document.querySelector('#loginModal .modal');var kb=document.getElementById('btnKakao');
+  if(modal&&kb&&!document.getElementById('emailLoginWrap')){
+    var w=document.createElement('div');w.id='emailLoginWrap';w.style.cssText='margin-top:10px;display:flex;flex-direction:column;gap:8px';
+    w.innerHTML="<div style='text-align:center;color:#6b7684;font-size:12px;margin:6px 0'>또는 이메일로 로그인</div><input id='emEmail' type='email' placeholder='이메일' autocomplete='username' style='padding:12px;border:1px solid #e5e8eb;border-radius:12px;font-size:15px'><input id='emPwd' type='password' placeholder='비밀번호' autocomplete='current-password' style='padding:12px;border:1px solid #e5e8eb;border-radius:12px;font-size:15px'><button id='btnEmailLogin' class='bigbtn' style='background:#191f28;color:#fff'>이메일로 로그인</button><div id='emMsg' style='font-size:13px;text-align:center;min-height:16px'></div>";
+    kb.insertAdjacentElement('afterend',w);
+    document.getElementById('btnEmailLogin').addEventListener('click',async function(){
+      var em=(document.getElementById('emEmail').value||'').trim(),pw=document.getElementById('emPwd').value,msg=document.getElementById('emMsg');
+      msg.style.color='#6b7684';msg.textContent='로그인 중...';
+      try{var rr=await supabase.auth.signInWithPassword({email:em,password:pw});if(rr&&rr.error){msg.style.color='#f04452';msg.textContent='로그인 실패: '+rr.error.message;}else{msg.style.color='#04c75a';msg.textContent='로그인 성공';location.reload();}}
+      catch(e){msg.style.color='#f04452';msg.textContent='오류: '+((e&&e.message)||e);}
+    });
+  }
+}catch(e){console.warn('email login inject failed',e);}})();
 $('btnKakao').onclick = ()=> S.supabase.auth.signInWithOAuth({
   provider:'kakao',
   options:{ redirectTo: location.origin }
