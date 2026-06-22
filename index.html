@@ -611,7 +611,7 @@ $('btnGoogle').onclick = ()=> S.supabase.auth.signInWithOAuth({
     document.getElementById('btnEmailLogin').addEventListener('click',async function(){
       var em=(document.getElementById('emEmail').value||'').trim(),pw=document.getElementById('emPwd').value,msg=document.getElementById('emMsg');
       msg.style.color='#6b7684';msg.textContent='로그인 중...';
-      try{var rr=await supabase.auth.signInWithPassword({email:em,password:pw});if(rr&&rr.error){msg.style.color='#f04452';msg.textContent='로그인 실패: '+rr.error.message;}else{msg.style.color='#04c75a';msg.textContent='로그인 성공';location.reload();}}
+      try{var __cfg=await (await fetch('/api/config')).json();var __sb=window.supabase.createClient(__cfg.supabaseUrl,__cfg.supabaseAnonKey);var rr=await __sb.auth.signInWithPassword({email:em,password:pw});if(rr&&rr.error){msg.style.color='#f04452';msg.textContent='로그인 실패: '+rr.error.message;}else{msg.style.color='#04c75a';msg.textContent='로그인 성공';location.reload();}}
       catch(e){msg.style.color='#f04452';msg.textContent='오류: '+((e&&e.message)||e);}
     });
   }
