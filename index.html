@@ -616,6 +616,7 @@ $('btnGoogle').onclick = ()=> S.supabase.auth.signInWithOAuth({
     });
   }
 }catch(e){console.warn('email login inject failed',e);}})();
+(function(){function addChargeBtn(){try{var hdr=document.querySelector('header');if(!hdr||document.getElementById('btnCharge'))return;var b=document.createElement('button');b.id='btnCharge';b.type='button';b.textContent='💳 충전';b.style.cssText='margin-left:8px;padding:8px 14px;border-radius:10px;background:#3182f6;color:#fff;font-weight:700;font-size:14px;border:none;cursor:pointer';b.addEventListener('click',function(){try{if(typeof window.startPurchase==='function'){window.startPurchase('single');}else{alert('결제 기능을 불러오는 중이에요. 잠시 후 다시 시도해주세요.');}}catch(e){alert('오류: '+((e&&e.message)||e));}});hdr.appendChild(b);}catch(e){}}if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',addChargeBtn);}else{addChargeBtn();}setTimeout(addChargeBtn,1000);setTimeout(addChargeBtn,2500);})();
 $('btnKakao').onclick = ()=> S.supabase.auth.signInWithOAuth({
   provider:'kakao',
   options:{ redirectTo: location.origin }
