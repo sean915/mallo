@@ -1,3 +1,6 @@
+→ https://raw.githubusercontent.com/sean915/mallo/main/index.html
+Content-Type: text/plain; charset=utf-8
+
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -24,7 +27,7 @@
   button{font-family:inherit;cursor:pointer;border:none;background:none}
   input,textarea{font-family:inherit}
 
-  header{height:60px;background:var(--card);border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 20px;gap:14px}
+  header{height:60px;background:var(--card);border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 64px 0 20px;gap:14px}
   .logo{font-size:22px;font-weight:800;letter-spacing:-0.5px}
   .logo b{color:var(--blue)}
   .tagline{font-size:13px;color:var(--sub)}
@@ -194,6 +197,7 @@
   <div class="tagline">말로 만드는 내 업무 도구</div>
   <div class="spacer"></div>
   <div class="trial-badge hidden" id="trialBadge"></div>
+  <button class="hbtn primary hidden" id="btnCharge">💳 충전</button>
   <button class="hbtn hidden" id="btnMyTools">📂 내 도구함</button>
   <button class="hbtn primary hidden" id="btnFeedback">💬 피드백</button>
   <button class="hbtn hidden" id="btnLogout">로그아웃</button>
@@ -573,6 +577,7 @@ function setSession(session){
   $('btnLogout').classList.toggle('hidden', !loggedIn);
   $('btnFeedback').classList.toggle('hidden', !loggedIn);
   $('btnMyTools').classList.toggle('hidden', !loggedIn);
+  $('btnCharge').classList.toggle('hidden', !loggedIn);
   $('trialBadge').classList.toggle('hidden', !loggedIn);
   if(loggedIn){
     refreshMe();
@@ -616,7 +621,7 @@ $('btnGoogle').onclick = ()=> S.supabase.auth.signInWithOAuth({
     });
   }
 }catch(e){console.warn('email login inject failed',e);}})();
-(function(){function addChargeBtn(){try{var hdr=document.querySelector('header');if(!hdr||document.getElementById('btnCharge'))return;var b=document.createElement('button');b.id='btnCharge';b.type='button';b.textContent='💳 충전';b.style.cssText='margin-left:8px;padding:8px 14px;border-radius:10px;background:#3182f6;color:#fff;font-weight:700;font-size:14px;border:none;cursor:pointer';b.addEventListener('click',function(){try{if(typeof window.startPurchase==='function'){window.startPurchase('single');}else{alert('결제 기능을 불러오는 중이에요. 잠시 후 다시 시도해주세요.');}}catch(e){alert('오류: '+((e&&e.message)||e));}});hdr.appendChild(b);}catch(e){}}if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',addChargeBtn);}else{addChargeBtn();}setTimeout(addChargeBtn,1000);setTimeout(addChargeBtn,2500);})();
+$('btnCharge').onclick = ()=>{ try{ if(typeof window.startPurchase==='function'){ window.startPurchase('single'); } else { alert('결제 기능을 불러오는 중이에요. 잠시 후 다시 시도해주세요.'); } }catch(e){ alert('오류: '+((e&&e.message)||e)); } };
 $('btnKakao').onclick = ()=> S.supabase.auth.signInWithOAuth({
   provider:'kakao',
   options:{ redirectTo: location.origin }
