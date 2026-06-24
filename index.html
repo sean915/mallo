@@ -200,6 +200,7 @@ Content-Type: text/plain; charset=utf-8
   <button class="hbtn primary hidden" id="btnCharge">💳 충전</button>
   <button class="hbtn hidden" id="btnMyTools">📂 내 도구함</button>
   <button class="hbtn primary hidden" id="btnFeedback">💬 피드백</button>
+  <button class="hbtn primary hidden" id="btnLogin">🔑 로그인</button>
   <button class="hbtn hidden" id="btnLogout">로그아웃</button>
 </header>
 
@@ -264,7 +265,7 @@ Content-Type: text/plain; charset=utf-8
 </div>
 
 <!-- 로그인 모달 -->
-<div class="overlay" id="loginModal">
+<div class="overlay hidden" id="loginModal">
   <div class="modal">
     <div class="login-hero">
       <div class="biglogo">말<b>로</b></div>
@@ -273,7 +274,7 @@ Content-Type: text/plain; charset=utf-8
     <div class="login-feats">
       <div class="lfeat"><div class="ic">🖱️</div><div class="tx">고르면<br>바로 완성</div></div>
       <div class="lfeat"><div class="ic">💾</div><div class="tx">내 도구함<br>저장</div></div>
-      <div class="lfeat"><div class="ic">🎁</div><div class="tx">3회<br>무료 체험</div></div>
+      <div class="lfeat"><div class="ic">🎁</div><div class="tx">2회<br>무료 체험</div></div>
     </div>
     <button class="bigbtn google" id="btnGoogle">
       <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3l5.7-5.7C34.3 6.1 29.4 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.6-.4-3.9z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 15.1 18.9 12 24 12c3.1 0 5.9 1.2 8 3l5.7-5.7C34.3 6.1 29.4 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.3 0-9.7-3.4-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C36.9 39.2 44 34 44 24c0-1.3-.1-2.6-.4-3.9z"/></svg>
@@ -282,7 +283,8 @@ Content-Type: text/plain; charset=utf-8
     <button class="bigbtn" id="btnKakao" style="background:#FEE500;color:#191600;margin-top:10px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:8px">
       <span style="font-size:18px">💬</span> 카카오로 시작하기
     </button>
-    <p class="sub" style="text-align:center;margin-top:14px">🧪 베타 테스트 중 · 가입 즉시 3회 무료 체험</p>
+    <p class="sub" style="text-align:center;margin-top:14px">🧪 베타 테스트 중 · 로그인하면 2회 무료 체험</p>
+    <button class="bigbtn gray" id="btnLoginClose" style="margin-top:12px">나중에 하기</button>
     <p class="sub" style="text-align:center;margin-top:6px;font-size:12.5px;color:#8b95a1">카카오톡 안에서 열었다면 구글 로그인이 막힐 수 있어요. 그땐 카카오로 시작하거나, 메뉴 → 다른 브라우저로 열기를 눌러주세요.</p>
     <p class="sub" style="text-align:center;margin-top:10px;font-size:12px;color:#8b95a1">로그인 시 <a href="/terms.html" target="_blank" style="color:#6b7684">이용약관</a> · <a href="/privacy.html" target="_blank" style="color:#6b7684">개인정보처리방침</a> · <a href="/refund.html" target="_blank" style="color:#6b7684">환불·해지 정책</a>에 동의하게 됩니다.</p>
     <div style="margin-top:16px;padding-top:12px;border-top:1px solid #eef1f4;text-align:center;font-size:10.5px;line-height:1.6;color:#b0b8c1">
@@ -573,15 +575,50 @@ const payConfigured = ()=> !!(S.cfg && S.cfg.payStoreId && S.cfg.payChannelKey);
 function setSession(session){
   S.session = session;
   const loggedIn = !!session;
-  $('loginModal').classList.toggle('hidden', loggedIn);
   $('btnLogout').classList.toggle('hidden', !loggedIn);
   $('btnFeedback').classList.toggle('hidden', !loggedIn);
   $('btnMyTools').classList.toggle('hidden', !loggedIn);
   $('btnCharge').classList.toggle('hidden', !loggedIn);
-  $('trialBadge').classList.toggle('hidden', !loggedIn);
+  $('btnLogin').classList.toggle('hidden', loggedIn);
+  $('trialBadge').classList.remove('hidden');
   if(loggedIn){
+    $('loginModal').classList.add('hidden');
     refreshMe();
     if(!S.loggedTracked){ S.loggedTracked = true; track('login'); }
+  } else {
+    refreshAnon(true);   // 비로그인: 기기 무료 남은 횟수 표시(소진 시 로그인 모달)
+  }
+}
+// 비로그인 기기 식별값(로컬 저장). 같은 기기면 재접속해도 동일 → 서버가 무료 1회를 기억해 막음.
+function deviceId(){
+  try{
+    let d = localStorage.getItem('mallo_device');
+    if(!d){ d = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : ('d-'+Date.now()+'-'+Math.random().toString(36).slice(2)); localStorage.setItem('mallo_device', d); }
+    return d;
+  }catch(e){
+    if(!S._dev) S._dev = 'd-'+Date.now()+'-'+Math.random().toString(36).slice(2);
+    return S._dev;
+  }
+}
+function openLogin(){ $('loginModal').classList.remove('hidden'); }
+function closeLogin(){ $('loginModal').classList.add('hidden'); }
+// 비로그인 남은 무료 횟수 조회 → 배지 갱신. autoGate=true면 소진 시 로그인 모달을 띄움.
+async function refreshAnon(autoGate){
+  const b = $('trialBadge'); b.classList.remove('hidden');
+  let remaining = (S.cfg && S.cfg.anonFreeLimit != null) ? Number(S.cfg.anonFreeLimit) : 1;
+  b.textContent = '🎁 무료 ' + remaining + '회 체험'; b.classList.remove('expired');   // 조회 전 임시 표시
+  try{
+    const res = await fetch('/api/anon?device=' + encodeURIComponent(deviceId()));
+    if(res.ok){ const j = await res.json(); if(j && j.remaining != null) remaining = Number(j.remaining); }
+  }catch(e){}
+  S.anonRemaining = remaining;
+  if(remaining > 0){
+    b.textContent = '🎁 무료 ' + remaining + '회 체험';
+    b.classList.remove('expired');
+  } else {
+    b.textContent = '🔒 로그인하면 2회 무료';
+    b.classList.add('expired');
+    if(autoGate) openLogin();
   }
 }
 async function refreshMe(){
@@ -627,6 +664,8 @@ $('btnKakao').onclick = ()=> S.supabase.auth.signInWithOAuth({
   options:{ redirectTo: location.origin }
 });
 $('btnLogout').onclick = async ()=>{ await S.supabase.auth.signOut(); location.reload(); };
+$('btnLogin').onclick = ()=> openLogin();
+$('btnLoginClose').onclick = ()=> closeLogin();
 
 /* ================== 결제(포트원 · 카카오페이 단건결제 · 프로그램 생성권 충전) ================== */
 function packOrderName(pack){ return '말로 프로그램 생성권 ' + (pack.credits || 0) + '건'; }
@@ -723,7 +762,14 @@ function extractHtml(text){
 }
 
 async function generate(req){
-  if(S.busy || !S.session) return;
+  if(S.busy) return;
+  const loggedIn = !!S.session;
+  // 비로그인 무료 1회 소진 → 로그인 유도(서버도 이중 검증)
+  if(!loggedIn && S.anonRemaining != null && S.anonRemaining <= 0){
+    openLogin();
+    toast('비로그인 무료 1회를 다 쓰셨어요. 로그인하면 2번 더 무료예요 ✨');
+    return;
+  }
   S.busy = true;
   $('btnSend').disabled = true;
   $('welcome').classList.add('hidden');
@@ -745,21 +791,23 @@ async function generate(req){
 
   let acc = '';
   try{
+    const headers = { 'content-type':'application/json' };
+    if(loggedIn) headers.authorization = `Bearer ${S.session.access_token}`;
+    else headers['x-mallo-device'] = deviceId();
     const res = await fetch('/api/generate', {
       method:'POST',
-      headers:{
-        'content-type':'application/json',
-        authorization:`Bearer ${S.session.access_token}`
-      },
+      headers,
       body: JSON.stringify({ prompt:req, code:S.code || undefined, lang:(localStorage.getItem('mallo_lang')||'ko') })
     });
 
     if(!res.ok){
       let err = {};
       try{ err = await res.json(); }catch(e){}
-      if(err.code === 'trial_over' || err.code === 'limit'){
+      if(err.code === 'login_required'){
+        openLogin();   // 비로그인 무료 소진 → 로그인 유도
+      } else if(err.code === 'no_credit' || err.code === 'trial_over' || err.code === 'limit'){
         track('trial_over', { reason: err.code });
-        openFeedback(true);
+        openFeedback(true);   // 로그인 무료 2회 소진 → 결제유도창
       }
       throw new Error(err.error || '문제가 생겼어요. 다시 시도해 주세요.');
     }
@@ -798,8 +846,13 @@ async function generate(req){
     track('generate', { edited: S.codeHistory });
     S.codeHistory = true;
     $('editChips').classList.remove('hidden');   // 탭으로 수정하는 추천 버튼
-    saveCurrentTool(req);                         // 내 도구함에 자동 저장
-    refreshMe();
+    if(loggedIn){
+      saveCurrentTool(req);                       // 내 도구함에 자동 저장(로그인 사용자)
+      refreshMe();
+    } else {
+      refreshAnon(false);                          // 비로그인: 남은 무료 횟수 갱신(모달은 자동으로 띄우지 않음)
+      toast('무료 체험을 사용했어요! 로그인하면 2번 더 무료로 만들 수 있어요 ✨');
+    }
   }catch(err){
     clearInterval(stepTimer);
     botMsg.classList.remove('working');
@@ -957,7 +1010,7 @@ function openFeedback(beta){
       $('fbTitle').textContent = '무료 횟수를 다 쓰셨어요 🎉';
       $('fbSub').textContent = '생성권을 충전하면 계속 만들 수 있어요. 카카오페이로 한 번만 결제하면 끝, 구매한 생성권은 만료 없이 계속 쓸 수 있어요.';
     } else {
-      $('fbTitle').textContent = '무료 체험 3회가 끝났어요 🧪';
+      $('fbTitle').textContent = '무료 체험이 끝났어요 🧪';
       $('fbSub').textContent = '말로는 아직 베타 테스트 버전이에요. 지금은 결제 없이 준비 중이고, 정식 오픈하면 알려드릴게요. 써보신 후기를 남겨 주시면 큰 힘이 됩니다!';
     }
   } else {
@@ -1017,6 +1070,6 @@ initAuth();
   function modal(def){ var ov=document.createElement('div'); ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2147483647;display:flex;align-items:center;justify-content:center;padding:20px'; var bx=document.createElement('div'); bx.style.cssText='background:#fff;border-radius:18px;padding:28px 24px;max-width:330px;width:100%;text-align:center;font-family:Pretendard,-apple-system,sans-serif;box-shadow:0 14px 44px rgba(0,0,0,.22)'; var h=document.createElement('div'); h.style.cssText='font-size:22px;font-weight:800;margin-bottom:4px'; h.textContent='말로 · mallo'; var sub=document.createElement('div'); sub.style.cssText='color:#6b7684;font-size:13.5px;margin-bottom:18px'; sub.textContent='언어를 선택하세요 / Choose your language'; bx.appendChild(h); bx.appendChild(sub); function mk(label,lang){ var b=document.createElement('button'); b.textContent=label; b.style.cssText='display:block;width:100%;margin:8px 0;padding:14px;border-radius:12px;border:2px solid '+(def===lang?'#3182f6':'#e5e8eb')+';background:'+(def===lang?'#eef5ff':'#fff')+';font:700 16px sans-serif;cursor:pointer'; b.onclick=function(){ apply(lang); ov.remove(); toggle(); }; return b; } bx.appendChild(mk('한국어','ko')); bx.appendChild(mk('English','en')); ov.appendChild(bx); document.body.appendChild(ov); }
   function init(){ var saved=null; try{ saved=localStorage.getItem('mallo_lang'); }catch(e){} startObs(); var def=(navigator.language||'').toLowerCase().indexOf('ko')===0?'ko':'en'; if(saved){ apply(saved); toggle(); } else { cur='ko'; modal(def); } }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init); else init();
-})({"📂 내 도구함":"📂 My Tools","💬 피드백":"💬 Feedback","로그아웃":"Log out","✏️ 만들기":"✏️ Make","👁️ 미리보기":"👁️ Preview","어떤 도구가 필요하세요? 🛠️":"What tool do you need? 🛠️","거래처·고객 관리":"Contacts / CRM","연락처·메모·검색":"Contacts · notes · search","매출·지출 장부":"Sales & expense ledger","일별 합계·순이익":"Daily totals · net profit","재고 관리":"Inventory","수량·부족 알림":"Quantity · low-stock alerts","출퇴근 기록":"Attendance","근무시간 자동계산":"Auto work-hour calc","견적서·명세서":"Quotes & invoices","금액·부가세 자동":"Auto totals · VAT","할 일·진행 보드":"Task / Kanban board","칸반·마감일":"Kanban · due dates","회의록·메모":"Meeting notes","결정사항·검색":"Decisions · search","예약·일정":"Bookings & schedule","달력·오늘 예약":"Calendar · today","실무 계산기":"Work calculator","부가세·마진·할인":"VAT · margin · discount","✏️ 직접 말로 만들기":"✏️ Describe your own","🔍 크게":"🔍 Bigger","➕ 항목 추가":"➕ Add field","📊 엑셀 내보내기":"📊 Export Excel","🖨️ 인쇄":"🖨️ Print","🎨 색 바꾸기":"🎨 Change colors","실시간 미리보기":"Live preview","＋ 새로 만들기":"＋ New","📲 앱으로 설치 — 홈 화면에 추가":"📲 Install app — Add to Home Screen","⬇ 내려받기 — 오프라인 실행파일":"⬇ Download — offline app","아직 만든 도구가 없어요":"No tools yet","왼쪽에서 필요한 도구를 고르면":"Pick a tool on the left,","여기서 바로 만들어지고, 바로 써볼 수 있어요.":"and it appears here, ready to use.","코딩 몰라도 돼요.":"No coding needed.","업무에 필요한 도구를 말로 만들어 쓰세요.":"Build the tools you need just by describing them.","고르면":"Pick one","바로 완성":"Built instantly","내 도구함":"My Tools","저장":"saved","3회":"3 free","무료 체험":"trials","구글로 3초 만에 시작하기":"Start with Google","카카오로 시작하기":"Start with Kakao","🧪 베타 테스트 중 · 가입 즉시 3회 무료 체험":"🧪 In beta · 3 free trials on sign-up","카카오톡 안에서 열었다면 구글 로그인이 막힐 수 있어요. 그땐 카카오로 시작하거나, 메뉴 → 다른 브라우저로 열기를 눌러주세요.":"If opened inside KakaoTalk, Google login may be blocked. Use Kakao, or open in another browser from the menu.","이용약관":"Terms","개인정보처리방침":"Privacy Policy","환불·해지 정책":"Refund Policy","상호: 말로 · 대표자: 한호정 · 사업자등록번호: 489-07-03664 · 통신판매업: 신고 준비중":"Company: Mallo · CEO: Hojeong Han · Biz Reg. No.: 489-07-03664 · E-commerce: registration pending","사업장 소재지: 서울특별시 노원구 동일로237바길 17, 101동 202호 · 유선번호: 050-6544-3197 · 이메일: seanhh915@gmail.com":"Address: 17 Dongil-ro 237ba-gil, Nowon-gu, Seoul, Korea · Tel: 050-6544-3197 · Email: seanhh915@gmail.com","내 도구함 📂":"My Tools 📂","내가 만든 도구들이 자동 저장돼요. 언제든 다시 열고, 앱처럼 설치하거나 공유할 수 있어요.":"Your tools are saved automatically. Reopen, install, or share them anytime.","닫기":"Close","회원 탈퇴":"Delete account","의견을 들려주세요 💬":"Send us feedback 💬","말로는 지금 베타 테스트 중이에요. 좋았던 점·불편한 점·만들고 싶은 기능 뭐든 적어 주세요!":"Mallo is in beta. Tell us what you liked, what felt off, or features you want!","의견 보내기":"Send feedback","내 앱으로 내려받기 💻":"Download as an app 💻","지금 만든 도구를 윈도우·맥·리눅스에서 실행할 수 있는 앱으로 묶어 드려요.":"Package your tool as a Windows / Mac / Linux app.","Windows용 앱":"Windows app","ZIP 다운로드 · exe 실행":"ZIP download · run .exe","윈도우":"Windows","macOS용 앱 (Apple Silicon·M1 이상)":"macOS app (Apple Silicon · M1+)","ZIP 다운로드 · 앱 실행":"ZIP download · run app","맥":"Mac","macOS용 앱 (Intel)":"macOS app (Intel)","Linux용 앱":"Linux app","ZIP 다운로드 · AppImage 실행":"ZIP download · run AppImage","리눅스":"Linux","앱 파일을 준비하고 있어요… 잠시만 기다려 주세요.":"Preparing your app file… please wait.","내 도구":"My tool","나도 만들기":"Make your own","편집":"Edit","앱으로 설치":"Install app","완성했어요! 바로 써보세요. 입력한 내용은 자동 저장돼요. 아래 버튼이나 말로 고칠 수 있어요 😊":"Done! Try it now — your inputs save automatically. Edit with the buttons or just tell me 😊","고쳤어요! 오른쪽에서 확인해 보세요. 더 바꾸고 싶으면 아래 버튼이나 말로 알려주세요 😊":"Updated! Check the right side. Want more changes? Use the buttons or just tell me 😊","로그인이 필요해요":"Please log in","실시간으로 만들어지는 중...":"Building in real time...","먼저 도구를 만들어 주세요":"Make a tool first","앱을 먼저 만들어 주세요!":"Make a tool first!","아직 만든 도구가 없어요. 먼저 앱을 만들어 주세요!":"No tools yet — make one first!","요청을 이해하는 중":"Understanding your request","화면을 설계하는 중":"Designing the screen","기능을 만드는 중":"Building features","마무리 점검 중":"Final checks","공유 링크를 복사했어요! 붙여넣어 보내세요 🔗":"Share link copied! Paste to send 🔗","소중한 의견 감사해요! 🙏":"Thanks for your feedback! 🙏","도구를 열지 못했어요":"Couldn't open the tool","문제가 생겼어요. 다시 시도해 주세요.":"Something went wrong. Please try again.","결과를 만들지 못했어요. 조금 더 구체적으로 말씀해 주시겠어요?":"Couldn't generate a result. Could you be a bit more specific?","필요한 걸 한국말로 적으면 돼요 · 만든 뒤 \"글자 더 크게 해줘\"처럼 말로 고칠 수 있어요":"Describe what you need in plain words — then refine by saying e.g. make the text bigger.","예) 거래처 연락처 정리하는 표 만들어줘":"e.g. Make a table to organize client contacts","자유롭게 후기를 남겨 주세요 (예: 어떤 앱을 만들고 싶었는지, 아쉬운 점)":"Share your thoughts (e.g. what you wanted to build, what felt lacking)","만들기":"Make"});</script>
+})({"📂 내 도구함":"📂 My Tools","💬 피드백":"💬 Feedback","로그아웃":"Log out","🔑 로그인":"🔑 Log in","나중에 하기":"Later","✏️ 만들기":"✏️ Make","👁️ 미리보기":"👁️ Preview","어떤 도구가 필요하세요? 🛠️":"What tool do you need? 🛠️","거래처·고객 관리":"Contacts / CRM","연락처·메모·검색":"Contacts · notes · search","매출·지출 장부":"Sales & expense ledger","일별 합계·순이익":"Daily totals · net profit","재고 관리":"Inventory","수량·부족 알림":"Quantity · low-stock alerts","출퇴근 기록":"Attendance","근무시간 자동계산":"Auto work-hour calc","견적서·명세서":"Quotes & invoices","금액·부가세 자동":"Auto totals · VAT","할 일·진행 보드":"Task / Kanban board","칸반·마감일":"Kanban · due dates","회의록·메모":"Meeting notes","결정사항·검색":"Decisions · search","예약·일정":"Bookings & schedule","달력·오늘 예약":"Calendar · today","실무 계산기":"Work calculator","부가세·마진·할인":"VAT · margin · discount","✏️ 직접 말로 만들기":"✏️ Describe your own","🔍 크게":"🔍 Bigger","➕ 항목 추가":"➕ Add field","📊 엑셀 내보내기":"📊 Export Excel","🖨️ 인쇄":"🖨️ Print","🎨 색 바꾸기":"🎨 Change colors","실시간 미리보기":"Live preview","＋ 새로 만들기":"＋ New","📲 앱으로 설치 — 홈 화면에 추가":"📲 Install app — Add to Home Screen","⬇ 내려받기 — 오프라인 실행파일":"⬇ Download — offline app","아직 만든 도구가 없어요":"No tools yet","왼쪽에서 필요한 도구를 고르면":"Pick a tool on the left,","여기서 바로 만들어지고, 바로 써볼 수 있어요.":"and it appears here, ready to use.","코딩 몰라도 돼요.":"No coding needed.","업무에 필요한 도구를 말로 만들어 쓰세요.":"Build the tools you need just by describing them.","고르면":"Pick one","바로 완성":"Built instantly","내 도구함":"My Tools","저장":"saved","2회":"2 free","무료 체험":"trials","구글로 3초 만에 시작하기":"Start with Google","카카오로 시작하기":"Start with Kakao","🧪 베타 테스트 중 · 로그인하면 2회 무료 체험":"🧪 In beta · 2 free trials after login","카카오톡 안에서 열었다면 구글 로그인이 막힐 수 있어요. 그땐 카카오로 시작하거나, 메뉴 → 다른 브라우저로 열기를 눌러주세요.":"If opened inside KakaoTalk, Google login may be blocked. Use Kakao, or open in another browser from the menu.","이용약관":"Terms","개인정보처리방침":"Privacy Policy","환불·해지 정책":"Refund Policy","상호: 말로 · 대표자: 한호정 · 사업자등록번호: 489-07-03664 · 통신판매업: 신고 준비중":"Company: Mallo · CEO: Hojeong Han · Biz Reg. No.: 489-07-03664 · E-commerce: registration pending","사업장 소재지: 서울특별시 노원구 동일로237바길 17, 101동 202호 · 유선번호: 050-6544-3197 · 이메일: seanhh915@gmail.com":"Address: 17 Dongil-ro 237ba-gil, Nowon-gu, Seoul, Korea · Tel: 050-6544-3197 · Email: seanhh915@gmail.com","내 도구함 📂":"My Tools 📂","내가 만든 도구들이 자동 저장돼요. 언제든 다시 열고, 앱처럼 설치하거나 공유할 수 있어요.":"Your tools are saved automatically. Reopen, install, or share them anytime.","닫기":"Close","회원 탈퇴":"Delete account","의견을 들려주세요 💬":"Send us feedback 💬","말로는 지금 베타 테스트 중이에요. 좋았던 점·불편한 점·만들고 싶은 기능 뭐든 적어 주세요!":"Mallo is in beta. Tell us what you liked, what felt off, or features you want!","의견 보내기":"Send feedback","내 앱으로 내려받기 💻":"Download as an app 💻","지금 만든 도구를 윈도우·맥·리눅스에서 실행할 수 있는 앱으로 묶어 드려요.":"Package your tool as a Windows / Mac / Linux app.","Windows용 앱":"Windows app","ZIP 다운로드 · exe 실행":"ZIP download · run .exe","윈도우":"Windows","macOS용 앱 (Apple Silicon·M1 이상)":"macOS app (Apple Silicon · M1+)","ZIP 다운로드 · 앱 실행":"ZIP download · run app","맥":"Mac","macOS용 앱 (Intel)":"macOS app (Intel)","Linux용 앱":"Linux app","ZIP 다운로드 · AppImage 실행":"ZIP download · run AppImage","리눅스":"Linux","앱 파일을 준비하고 있어요… 잠시만 기다려 주세요.":"Preparing your app file… please wait.","내 도구":"My tool","나도 만들기":"Make your own","편집":"Edit","앱으로 설치":"Install app","완성했어요! 바로 써보세요. 입력한 내용은 자동 저장돼요. 아래 버튼이나 말로 고칠 수 있어요 😊":"Done! Try it now — your inputs save automatically. Edit with the buttons or just tell me 😊","고쳤어요! 오른쪽에서 확인해 보세요. 더 바꾸고 싶으면 아래 버튼이나 말로 알려주세요 😊":"Updated! Check the right side. Want more changes? Use the buttons or just tell me 😊","로그인이 필요해요":"Please log in","실시간으로 만들어지는 중...":"Building in real time...","먼저 도구를 만들어 주세요":"Make a tool first","앱을 먼저 만들어 주세요!":"Make a tool first!","아직 만든 도구가 없어요. 먼저 앱을 만들어 주세요!":"No tools yet — make one first!","요청을 이해하는 중":"Understanding your request","화면을 설계하는 중":"Designing the screen","기능을 만드는 중":"Building features","마무리 점검 중":"Final checks","공유 링크를 복사했어요! 붙여넣어 보내세요 🔗":"Share link copied! Paste to send 🔗","소중한 의견 감사해요! 🙏":"Thanks for your feedback! 🙏","도구를 열지 못했어요":"Couldn't open the tool","문제가 생겼어요. 다시 시도해 주세요.":"Something went wrong. Please try again.","결과를 만들지 못했어요. 조금 더 구체적으로 말씀해 주시겠어요?":"Couldn't generate a result. Could you be a bit more specific?","필요한 걸 한국말로 적으면 돼요 · 만든 뒤 \"글자 더 크게 해줘\"처럼 말로 고칠 수 있어요":"Describe what you need in plain words — then refine by saying e.g. make the text bigger.","예) 거래처 연락처 정리하는 표 만들어줘":"e.g. Make a table to organize client contacts","자유롭게 후기를 남겨 주세요 (예: 어떤 앱을 만들고 싶었는지, 아쉬운 점)":"Share your thoughts (e.g. what you wanted to build, what felt lacking)","만들기":"Make"});</script>
 </body>
 </html>

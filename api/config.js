@@ -17,5 +17,7 @@ export default async function handler() {
     payChannelKey,
     payReady: !!(payStoreId && payChannelKey && hasPaySecret),
     plans: PLANS, // 만료 없는 프로그램 생성권 팩(가격·건수)
+    anonFreeLimit: Number(env('ANON_FREE_LIMIT', '1')), // 비로그인 기기당 무료 체험 횟수
+    trialLimit: Number(env('TRIAL_LIMIT', '2')),        // 로그인 계정 무료 체험 횟수
   });
 }

@@ -177,6 +177,53 @@ begin
   return json_build_object('restored', false, 'source', coalesce(p_source, 'unknown'));
 end $$;
 
+-- ============================================
+-- 비로그인(익명) 무료 체험: 기기(device)당 무료 N회
+-- 로그인 없이도 기기당 ANON_FREE_LIMIT(기본 1)회 생성 허용.
+-- 재접속(새로고침/재방문)해도 같은 device_id 면 서버가 사용 기록을 기억해 차단한다.
+-- RLS 켜고 정책 없음 → anon/authenticated 직접 접근 불가. service_role(API) + security definer 함수만 접근.
+-- ============================================
+create table if not exists public.anon_usage (
+  device_id text primary key,
+  used_count int not null default 0,
+  ip text,
+  created_at timestamptz not null default now(),
+  last_at timestamptz
+);
+alter table public.anon_usage enable row level security;
+
+-- 비로그인 생성 1회 사용 처리(원자적). 한도 초과면 allowed=false, reason='login_required'.
+create or replace function public.use_anon_generation(p_device text, p_ip text, p_limit int)
+returns json language plpgsql security definer set search_path = public as $$
+declare
+  r public.anon_usage;
+begin
+  if p_device is null or length(p_device) = 0 then
+    return json_build_object('allowed', false, 'reason', 'login_required');
+  end if;
+
+  insert into public.anon_usage (device_id, ip) values (p_device, p_ip)
+    on conflict (device_id) do nothing;
+  select * into r from public.anon_usage where device_id = p_device for update;
+
+  if r.used_count >= p_limit then
+    return json_build_object('allowed', false, 'reason', 'login_required');
+  end if;
+
+  update public.anon_usage set used_count = used_count + 1, ip = p_ip, last_at = now()
+    where device_id = p_device;
+  return json_build_object('allowed', true, 'remaining', p_limit - r.used_count - 1, 'source', 'anon');
+end $$;
+
+-- 비로그인 생성 실패 시 차감 복구(업스트림 오류·빈 응답 등).
+create or replace function public.restore_anon_generation(p_device text)
+returns json language plpgsql security definer set search_path = public as $$
+begin
+  update public.anon_usage set used_count = greatest(used_count - 1, 0), last_at = null
+    where device_id = p_device;
+  return json_build_object('restored', true);
+end $$;
+
 -- 사용자 피드백/후기
 create table if not exists public.feedback (
   id uuid primary key default gen_random_uuid(),

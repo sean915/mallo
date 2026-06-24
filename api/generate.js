@@ -247,12 +247,29 @@ async function restoreGeneration(uid, quota) {
   }
 }
 
+// 비로그인(익명) 생성 실패 시 기기 무료 차감 복구
+async function restoreAnon(device) {
+  if (!device) return;
+  try {
+    const res = await sb('rpc/restore_anon_generation', {
+      method: 'POST',
+      body: JSON.stringify({ p_device: device }),
+    });
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '');
+      console.error('[generate] anon restore failed', res.status, detail.slice(0, 300));
+    }
+  } catch (e) {
+    console.error('[generate] anon restore error', e?.message || e);
+  }
+}
+
 export default async function handler(req) {
   if (req.method !== 'POST') return json({ error: '허용되지 않은 요청이에요' }, 405);
 
-  // 1. 로그인 확인
+  // 1. 사용자 확인 (로그인은 선택 — 비로그인도 기기당 무료 1회 허용)
   const user = await getUser(req);
-  if (!user) return json({ error: '로그인이 만료됐어요. 다시 로그인해 주세요.' }, 401);
+  const device = (req.headers.get('x-mallo-device') || '').trim().slice(0, 64);
 
   // 2. 요청 검증
   let body;
@@ -262,29 +279,48 @@ export default async function handler(req) {
     return json({ error: '요청 내용을 확인해 주세요 (최대 4000자)' }, 400);
   }
 
-  // 3. 체험/구독/월간한도 검사 + 사용량 차감 (DB에서 원자적으로)
-  const rpc = await sb('rpc/use_generation', {
-    method: 'POST',
-    body: JSON.stringify({
-      uid: user.id,
-      monthly_limit: Number(env('MONTHLY_LIMIT', '100')),
-      trial_minutes: Number(env('TRIAL_LIMIT', '3')), // 이제 '분'이 아니라 무료 체험 '횟수'
-      p_cooldown_sec: Number(env('COOLDOWN_SEC', '6')),   // 어뷰징: 계정당 연속 생성 최소 간격(초)
-      p_daily_cap: Number(env('DAILY_CAP', '500')),        // 어뷰징/비용: 일일 생성 상한
-    }),
-  });
-  if (!rpc.ok) return json({ error: '서버 오류가 났어요. 잠시 후 다시 시도해 주세요.' }, 500);
-  const quota = await rpc.json();
+  // 3. 사용권 검사 + 차감 (DB에서 원자적으로)
+  //  - 로그인: 계정 무료 체험(TRIAL_LIMIT=2회) → 만료 없는 이용권 순으로 차감
+  //  - 비로그인: 기기(device)당 무료 ANON_FREE_LIMIT(기본 1회). 소진 시 로그인 유도(login_required).
+  let quota, restore;
+  if (user) {
+    const rpc = await sb('rpc/use_generation', {
+      method: 'POST',
+      body: JSON.stringify({
+        uid: user.id,
+        monthly_limit: Number(env('MONTHLY_LIMIT', '100')),
+        trial_minutes: Number(env('TRIAL_LIMIT', '2')), // 로그인 계정 무료 체험 '횟수'
+        p_cooldown_sec: Number(env('COOLDOWN_SEC', '6')),   // 어뷰징: 계정당 연속 생성 최소 간격(초)
+        p_daily_cap: Number(env('DAILY_CAP', '500')),        // 어뷰징/비용: 일일 생성 상한
+      }),
+    });
+    if (!rpc.ok) return json({ error: '서버 오류가 났어요. 잠시 후 다시 시도해 주세요.' }, 500);
+    quota = await rpc.json();
+    restore = () => restoreGeneration(user.id, quota);
+  } else {
+    if (!device) return json({ error: '로그인하면 무료로 만들 수 있어요.', code: 'login_required' }, 401);
+    const ip = (req.headers.get('x-forwarded-for') || '').split(',')[0].trim();
+    const rpc = await sb('rpc/use_anon_generation', {
+      method: 'POST',
+      body: JSON.stringify({ p_device: device, p_ip: ip, p_limit: Number(env('ANON_FREE_LIMIT', '1')) }),
+    });
+    if (!rpc.ok) return json({ error: '서버 오류가 났어요. 잠시 후 다시 시도해 주세요.' }, 500);
+    quota = await rpc.json();
+    quota.source = 'anon';
+    restore = () => restoreAnon(device);
+  }
+
   if (!quota.allowed) {
     const MSG = {
       no_credit: '무료 횟수를 모두 썼어요. 이용권을 충전하면 계속 만들 수 있어요 ⚡',
       trial_over: '무료 횟수를 모두 썼어요. 이용권을 충전하면 계속 만들 수 있어요 ⚡',
+      login_required: '비로그인 무료 1회를 다 쓰셨어요. 로그인하면 2번 더 무료로 만들 수 있어요 ✨',
       cooldown: '조금 빠르네요! 몇 초 뒤에 다시 시도해 주세요 🙂',
       busy: '지금 접속이 많아 잠시 쉬어가는 중이에요. 잠시 후 다시 시도해 주세요 🙏',
     };
-    const code = quota.reason || 'no_credit';
-    const status = (code === 'cooldown' || code === 'busy') ? 429 : 402;
-    return json({ error: MSG[code] || MSG.limit, code }, status);
+    const rcode = quota.reason || 'no_credit';
+    const status = rcode === 'login_required' ? 401 : (rcode === 'cooldown' || rcode === 'busy') ? 429 : 402;
+    return json({ error: MSG[rcode] || MSG.no_credit, code: rcode }, status);
   }
 
   // 4. 프롬프트 정제: 사용자 원문을 서버 내부에서 제작 지시서로 바꾼 뒤 실제 생성 모델에 전달.
@@ -360,7 +396,7 @@ export default async function handler(req) {
   }
 
   if (!upstream.ok) {
-    await restoreGeneration(user.id, quota);
+    await restore();
     const detail = await upstream.text().catch(() => '');
     // 실제 업스트림 오류는 서버 로그에만 남기고, 사용자에겐 공급자/모델이 드러나지 않는 일반 문구만 노출
     console.error('[generate] upstream error', upstream.status, detail.slice(0, 500));
@@ -401,13 +437,13 @@ export default async function handler(req) {
           }
         }
         if (!sentAny) {
-          await restoreGeneration(user.id, quota);
+          await restore();
           controller.enqueue(enc.encode(`data: ${JSON.stringify({ error: '생성 결과를 받지 못했어요. 이용권은 차감되지 않았어요.' })}\n\n`));
         } else {
           controller.enqueue(enc.encode('data: [DONE]\n\n'));
         }
       } catch (e) {
-        await restoreGeneration(user.id, quota);
+        await restore();
         controller.enqueue(enc.encode(`data: ${JSON.stringify({ error: '생성 중 연결이 끊겼어요. 이용권은 차감되지 않았어요.' })}\n\n`));
       }
       controller.close();
