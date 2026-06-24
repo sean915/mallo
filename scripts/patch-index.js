@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 
 const path = 'index.html';
-let html = readFileSync(path, 'utf8');
+let html = readFileSync(path, 'utf8').replace(/\r\n/g, '\n');
 
 function replaceOnce(before, after, label) {
   if (!html.includes(before)) {
@@ -75,5 +75,33 @@ replaceOnce(
   'payment readiness check'
 );
 
+replaceOnce(
+`  .main{display:flex;height:calc(100% - 60px)}
+  .left{width:420px;min-width:340px;display:flex;flex-direction:column;background:var(--card);border-right:1px solid var(--line)}
+  .right{flex:1;display:flex;flex-direction:column;background:#fff}
+
+  .chat{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:14px}`,
+`  .main{display:flex;height:calc(100% - 60px);min-height:0}
+  .left{width:420px;min-width:340px;min-height:0;display:flex;flex-direction:column;background:var(--card);border-right:1px solid var(--line)}
+  .right{flex:1;min-height:0;display:flex;flex-direction:column;background:#fff}
+
+  .chat{flex:1;min-height:0;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:14px}`,
+  'prompt layout flex shrink'
+);
+
+replaceOnce(
+`  .tools-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:14px 20px}`,
+`  .tools-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:14px 20px;min-height:0;overflow-y:auto}`,
+  'prompt tools grid scroll'
+);
+
+replaceOnce(
+`    .left{width:100%;min-width:0;border-right:none;height:100%}
+    .right{height:100%}`,
+`    .left{width:100%;min-width:0;min-height:0;border-right:none;height:100%}
+    .right{min-height:0;height:100%}`,
+  'mobile prompt pane shrink'
+);
+
 writeFileSync(path, html);
-console.log('Patched index.html security guards and payment readiness');
+console.log('Patched index.html security guards, payment readiness, and prompt layout');
