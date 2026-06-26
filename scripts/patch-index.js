@@ -254,6 +254,14 @@ replaceOnce(
 );
 
 replaceOnce(
+`    <h2 id="fbTitle">의견을 들려주세요 💬</h2>
+    <p class="sub" id="fbSub">말로는 지금 베타 테스트 중이에요. 좋았던 점·불편한 점·만들고 싶은 기능 뭐든 적어 주세요!</p>`,
+`    <h2 id="fbTitle">의견을 들려주세요</h2>
+    <p class="sub" id="fbSub">말로를 쓰면서 좋았던 점, 불편했던 점, 만들고 싶은 기능을 편하게 남겨 주세요.</p>`,
+  'static feedback modal copy'
+);
+
+replaceOnce(
 `  $('fbModal').classList.remove('hidden');
   setTimeout(()=>$('fbText').focus(), 50);
 }
