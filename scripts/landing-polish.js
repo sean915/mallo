@@ -4,6 +4,7 @@ const file = 'index.html';
 let html = readFileSync(file, 'utf8');
 
 function replaceOnce(pattern, replacement, label) {
+  if (typeof replacement === 'string' && html.includes(replacement)) return;
   const next = html.replace(pattern, replacement);
   if (next === html) {
     throw new Error(`landing polish target not found: ${label}`);
