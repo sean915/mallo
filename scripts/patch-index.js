@@ -4,6 +4,7 @@ const path = 'index.html';
 let html = readFileSync(path, 'utf8').replace(/\r\n/g, '\n');
 
 function replaceOnce(before, after, label) {
+  if (html.includes(after)) return;
   if (!html.includes(before)) {
     throw new Error(`patch target not found: ${label}`);
   }
@@ -82,9 +83,27 @@ replaceOnce(
 );
 
 replaceOnce(
+`  body.app-mode{height:100%;background:var(--bg);overflow:hidden}
+  button{font-family:inherit;cursor:pointer;border:none;background:none}
+  input,textarea{font-family:inherit}
+  .app-shell{height:100%;min-height:100%}`,
+`  body.app-mode{height:100%;height:100dvh;min-height:100%;background:var(--bg);overflow:hidden}
+  button{font-family:inherit;cursor:pointer;border:none;background:none}
+  input,textarea{font-family:inherit}
+  .app-shell{height:100%;height:100dvh;min-height:0;display:flex;flex-direction:column}`,
+  'fixed app viewport shell'
+);
+
+replaceOnce(
+`  header{height:60px;background:var(--card);border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 64px 0 20px;gap:14px}`,
+`  header{height:60px;flex:0 0 60px;background:var(--card);border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 64px 0 20px;gap:14px}`,
+  'fixed app header height'
+);
+
+replaceOnce(
 `  .hidden{display:none !important}`,
 `  .hidden{display:none !important}
-  .site-footer{height:var(--footer-h);display:flex;align-items:center;justify-content:center;gap:8px;padding:0 12px;border-top:1px solid #eef1f4;background:rgba(255,255,255,.92);color:#9aa4b2;font-size:10px;line-height:1.35;white-space:nowrap;overflow:hidden}
+  .site-footer{height:var(--footer-h);flex:0 0 var(--footer-h);display:flex;align-items:center;justify-content:center;gap:8px;padding:0 12px;border-top:1px solid #eef1f4;background:rgba(255,255,255,.92);color:#9aa4b2;font-size:10px;line-height:1.35;white-space:nowrap;overflow:hidden}
   .site-footer span{display:inline-block}
   .site-footer a{color:#9aa4b2;text-decoration:none}
   .site-footer a:hover{text-decoration:underline}
@@ -107,7 +126,7 @@ replaceOnce(
 
 replaceOnce(
 `    .main{flex-direction:column;height:calc(100% - 60px - 46px)}`,
-`    .main{flex-direction:column;height:calc(100% - 60px - 46px - var(--footer-h))}`,
+`    .main{flex-direction:column;height:auto;min-height:0}`,
   'mobile app footer height'
 );
 
@@ -184,7 +203,7 @@ replaceOnce(
 
 replaceOnce(
 `    b.innerHTML = '<div><div class="pn">'+p.name+badge+'</div><div class="pd">'+p.credits+'건 생성권 · 건당 '+per.toLocaleString()+'원 · 만료 없음</div></div><div class="pv">'+p.price.toLocaleString()+'원</div>';`,
-`    b.innerHTML = '<div><div class="pn">'+p.name+badge+'</div><div class="pd">'+p.credits+'건 생성권 · 건당 '+per.toLocaleString()+'원 · 만료 없음 · 즉시 충전</div></div><div class="pv">'+p.price.toLocaleString()+'원<br><span style="font-size:11px;color:#6b7684">결제하기</span></div>';`,
+`    b.innerHTML = '<div><div class="pn">'+p.name+badge+'</div><div class="pd">'+p.credits+'건 생성권 · 만료 없음 · 즉시 충전</div></div><div class="pv">'+p.price.toLocaleString()+'원<br><span style="font-size:11px;color:#6b7684">결제하기</span></div>';`,
   'payment product detail copy'
 );
 
@@ -223,7 +242,7 @@ $('btnFeedback').onclick = ()=> openFeedback(false);`,
 function openCharge(){
   if(!payConfigured()){ toast('결제 준비 중이에요'); return; }
   $('fbTitle').textContent = '생성권 충전';
-  $('fbSub').textContent = '상품 종류와 가격을 확인한 뒤 결제할 상품을 선택해 주세요. 모든 상품은 500만원 이하의 만료 없는 디지털 생성권이며 결제 완료 즉시 충전됩니다.';
+  $('fbSub').textContent = '상품 종류와 가격을 확인한 뒤 결제할 상품을 선택해 주세요.';
   $('fbStars').classList.add('hidden');
   $('fbText').classList.add('hidden');
   $('btnFbSend').classList.add('hidden');
@@ -242,7 +261,7 @@ replaceOnce(
   .right{flex:1;display:flex;flex-direction:column;background:#fff}
 
   .chat{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:14px}`,
-`  .main{display:flex;height:calc(100% - 60px - var(--footer-h));min-height:0}
+`  .main{display:flex;flex:1 1 auto;height:auto;min-height:0}
   .left{width:420px;min-width:340px;min-height:0;display:flex;flex-direction:column;background:var(--card);border-right:1px solid var(--line)}
   .right{flex:1;min-height:0;display:flex;flex-direction:column;background:#fff}
 

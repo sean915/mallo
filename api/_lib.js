@@ -4,9 +4,9 @@
 // 컨셉: 한 번 호출하면 원큐로 프로그램(SW) 하나를 만든다. 기준가: 프로그램 1건 2,900원.
 export const PACKS = {
   single:   { name: '프로그램 1건 만들기', price: 2900, credits: 1 },
-  light:    { name: '프로그램 5건 · 600원 할인', price: 13900, credits: 5 },
-  standard: { name: '프로그램 10건 · 4,100원 할인', price: 24900, credits: 10 },
-  pro:      { name: '프로그램 30건 · 12,100원 할인', price: 74900, credits: 30 },
+  light:    { name: '프로그램 5건 · 5% 할인', price: 13700, credits: 5 },
+  standard: { name: '프로그램 10건 · 10% 할인', price: 26100, credits: 10 },
+  pro:      { name: '프로그램 30건 · 15% 할인', price: 73900, credits: 30 },
 };
 // 하위호환 별칭(구 구독 코드가 참조해도 빌드 깨지지 않도록)
 export const PLANS = PACKS;
