@@ -222,13 +222,35 @@ replaceOnce(
 replaceOnce(
 `      $('fbTitle').textContent = '무료 횟수를 다 쓰셨어요 🎉';
       $('fbSub').textContent = '생성권을 충전하면 계속 만들 수 있어요. 카카오페이로 한 번만 결제하면 끝, 구매한 생성권은 만료 없이 계속 쓸 수 있어요.';`,
-`      $('fbTitle').textContent = '무료 횟수를 다 쓰셨어요 🎉';
-      $('fbSub').textContent = '아래 생성권 상품을 확인한 뒤 필요한 상품을 선택해 결제해 주세요. 구매한 생성권은 만료 없이 계속 쓸 수 있어요.';
+`      $('fbTitle').textContent = '무료 생성권을 모두 사용했어요';
+      $('fbSub').textContent = '계속 만들려면 필요한 생성권 상품을 선택해 주세요. 구매한 생성권은 만료 없이 사용할 수 있습니다.';
       $('fbStars').classList.add('hidden');
       $('fbText').classList.add('hidden');
       $('btnFbSend').classList.add('hidden');
       $('payNote').classList.remove('hidden');`,
   'trial over shows product list first'
+);
+
+replaceOnce(
+`      $('fbTitle').textContent = '무료 체험이 끝났어요 🧪';
+      $('fbSub').textContent = '말로는 아직 베타 테스트 버전이에요. 지금은 결제 없이 준비 중이고, 정식 오픈하면 알려드릴게요. 써보신 후기를 남겨 주시면 큰 힘이 됩니다!';`,
+`      $('fbTitle').textContent = '무료 체험이 끝났어요';
+      $('fbSub').textContent = '지금은 정식 결제 오픈 전이에요. 사용 후 느낀 점을 남겨주시면 제품 개선에 반영하겠습니다.';`,
+  'trial over beta copy'
+);
+
+replaceOnce(
+`    $('fbTitle').textContent = '의견을 들려주세요 💬';
+    $('fbSub').textContent = '말로는 지금 베타 테스트 중이에요. 좋았던 점·불편한 점·만들고 싶은 기능 뭐든 적어 주세요!';`,
+`    $('fbTitle').textContent = '의견을 들려주세요';
+    $('fbSub').textContent = '말로를 쓰면서 좋았던 점, 불편했던 점, 만들고 싶은 기능을 편하게 남겨 주세요.';`,
+  'feedback modal copy'
+);
+
+replaceOnce(
+`"의견을 들려주세요 💬":"Send us feedback 💬","말로는 지금 베타 테스트 중이에요. 좋았던 점·불편한 점·만들고 싶은 기능 뭐든 적어 주세요!":"Mallo is in beta. Tell us what you liked, what felt off, or features you want!"`,
+`"의견을 들려주세요":"Send us feedback","말로를 쓰면서 좋았던 점, 불편했던 점, 만들고 싶은 기능을 편하게 남겨 주세요.":"Tell us what worked, what felt off, or what you want to build next."`,
+  'feedback i18n copy'
 );
 
 replaceOnce(
