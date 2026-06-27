@@ -8,7 +8,7 @@ const LOCAL_AI_PREVIEW_BRIDGE_SOURCE = "const PREVIEW_AI_BRIDGE = `" + String.ra
     window.__malloAiBridgeInstalled = true;
     const ko = window.말로 = window.말로 || {};
     const en = window.mallo = window.mallo || ko;
-    const HELP = '로컬 AI를 찾지 못했어요. Ollama를 실행하거나 말로 온라인에서 로그인해 AI 기능을 사용해 주세요.';
+    const HELP = '로컬 AI를 찾지 못했어요. Ollama를 설치하고 로컬 모델을 실행한 뒤 다시 시도해 주세요. 말로 서버 AI로는 자동 전환되지 않습니다.';
     const BASES = ['http://127.0.0.1:11434', 'http://localhost:11434'];
     const PREFERRED = ['llama3.2', 'llama3.1', 'qwen2.5', 'gemma3', 'mistral', 'phi4', 'phi3'];
     function storedModel(){ try{ return localStorage.getItem('mallo_local_ai_model') || ''; }catch(e){ return ''; } }
@@ -50,23 +50,10 @@ const LOCAL_AI_PREVIEW_BRIDGE_SOURCE = "const PREVIEW_AI_BRIDGE = `" + String.ra
       }
       throw last || new Error(HELP);
     }
-    function onlineAi(prompt){
-      return new Promise((resolve,reject)=>{
-        if(!parent || parent === window){ reject(new Error(HELP)); return; }
-        const id = Math.random().toString(36).slice(2);
-        listeners[id] = { resolve, reject };
-        try{ parent.postMessage({__mallo:'ai',id,prompt:String(prompt||'')},'*'); }
-        catch(e){ delete listeners[id]; reject(e); return; }
-        setTimeout(()=>{ if(listeners[id]){ delete listeners[id]; reject(new Error('AI 응답 시간이 초과됐어요')); }},60000);
-      });
-    }
     ko.aiLocal = en.aiLocal = localAi;
     ko.ai = en.ai = async function(prompt){
       try{ return await localAi(prompt); }
-      catch(localError){
-        try{ return await onlineAi(prompt); }
-        catch(e){ throw new Error(HELP); }
-      }
+      catch(e){ throw new Error(HELP); }
     };
   }
 ` + "`;\n";
@@ -132,6 +119,26 @@ replaceOnce(
   if(!(d && d.__mallo === 'data' && d.data)) return;
 `,
   'message source validation'
+);
+
+replaceOnce(
+`async function handleAiRequest(source, id, prompt){
+  try{
+    if(!S.session) throw new Error('로그인이 필요해요');
+    const res = await fetch('/api/ai', {
+      method:'POST', headers:{'content-type':'application/json', authorization:\`Bearer \${S.session.access_token}\`},
+      body: JSON.stringify({ prompt })
+    });
+    const j = await res.json();
+    source.postMessage({__mallo:'ai_result', id, text:j.text||'', error:j.error||null}, '*');
+  }catch(e){ source.postMessage({__mallo:'ai_result', id, error:e.message||'AI 호출 실패'}, '*'); }
+}
+`,
+`async function handleAiRequest(source, id, prompt){
+  try{ source.postMessage({__mallo:'ai_result', id, error:'이 도구의 AI 기능은 로컬 AI(Ollama)만 사용합니다. 말로 서버 AI로는 자동 전환되지 않습니다.'}, '*'); }catch(e){}
+}
+`,
+  'disable server AI relay'
 );
 
 replaceOnce(
