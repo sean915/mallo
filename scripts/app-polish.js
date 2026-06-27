@@ -127,7 +127,7 @@ replaceOnce(
 `        <textarea id=${q}input${q} rows=${q}1${q} placeholder=${q}예) 거래처 연락처 정리하는 표 만들어줘${q}></textarea>
         <button class=${q}send${q} id=${q}btnSend${q} title=${q}만들기${q}>↑</button>`,
 `        <button class=${q}attach-btn${q} id=${q}btnAttach${q} title=${q}파일 첨부${q} type=${q}button${q}>＋</button>
-        <input class=${q}attach-input${q} id=${q}fileInput${q} type=${q}file${q} accept=${q}image/*,.txt,.csv,.tsv,.json,.md,.html,.xml${q} multiple>
+        <input class=${q}attach-input${q} id=${q}fileInput${q} type=${q}file${q} accept=${q}image/*,.pdf,.xlsx,.xls,.txt,.csv,.tsv,.json,.md,.html,.xml${q} multiple>
         <textarea id=${q}input${q} rows=${q}1${q} placeholder=${q}예) 거래처 연락처 정리하는 표 만들어줘${q}></textarea>
         <button class=${q}send${q} id=${q}btnSend${q} title=${q}만들기${q}>↑</button>`
 );
@@ -192,6 +192,8 @@ function submit(){`,
 `const ATTACH_MAX_FILES = 3;
 const ATTACH_MAX_BYTES = 5 * 1024 * 1024;
 const ATTACH_TEXT_LIMIT = 1500;
+const ATTACH_TABLE_ROWS = 40;
+const ATTACH_PDF_PAGES = 5;
 S.attachments = S.attachments || [];
 
 function formatAttachmentSize(bytes){
@@ -202,6 +204,56 @@ function formatAttachmentSize(bytes){
 function isTextAttachment(file){
   const name = file.name.toLowerCase();
   return /^text\\//.test(file.type) || /\\.(txt|csv|tsv|json|md|html|xml)$/i.test(name);
+}
+function isSpreadsheetAttachment(file){
+  return /\\.(xlsx|xls)$/i.test(file.name);
+}
+function isPdfAttachment(file){
+  return file.type === 'application/pdf' || /\\.pdf$/i.test(file.name);
+}
+function loadAttachmentScript(src, globalName){
+  if(window[globalName]) return Promise.resolve(window[globalName]);
+  return new Promise((resolve, reject)=>{
+    const old = document.querySelector('script[data-attach-lib=' + globalName + ']');
+    if(old){
+      old.addEventListener('load', ()=>resolve(window[globalName]));
+      old.addEventListener('error', ()=>reject(new Error(globalName + ' 로딩 실패')));
+      return;
+    }
+    const s = document.createElement('script');
+    s.src = src;
+    s.async = true;
+    s.dataset.attachLib = globalName;
+    s.onload = ()=>window[globalName] ? resolve(window[globalName]) : reject(new Error(globalName + ' 로딩 실패'));
+    s.onerror = ()=>reject(new Error(globalName + ' 로딩 실패'));
+    document.head.appendChild(s);
+  });
+}
+async function readSpreadsheetAttachment(file){
+  const XLSXLib = await loadAttachmentScript('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js', 'XLSX');
+  const buf = await file.arrayBuffer();
+  const book = XLSXLib.read(buf, { type:'array', cellDates:true });
+  const sheetName = book.SheetNames[0];
+  const sheet = book.Sheets[sheetName];
+  const rows = XLSXLib.utils.sheet_to_json(sheet, { header:1, defval:'' }).slice(0, ATTACH_TABLE_ROWS);
+  const table = rows.map(row=>row.map(v=>String(v).replace(/\\s+/g, ' ').trim()).join(' | ')).filter(Boolean).join('\\n');
+  return '엑셀 파일: ' + file.name + '\\n첫 시트: ' + (sheetName || 'Sheet1') + '\\n행/열 일부:\\n' + table.slice(0, ATTACH_TEXT_LIMIT) + (rows.length >= ATTACH_TABLE_ROWS ? '\\n...(이하 생략)' : '');
+}
+async function readPdfAttachment(file){
+  const pdfjs = await loadAttachmentScript('https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js', 'pdfjsLib');
+  pdfjs.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const pdf = await pdfjs.getDocument({ data:bytes }).promise;
+  const maxPages = Math.min(pdf.numPages || 0, ATTACH_PDF_PAGES);
+  const chunks = [];
+  for(let p=1; p<=maxPages; p++){
+    const page = await pdf.getPage(p);
+    const content = await page.getTextContent();
+    const text = content.items.map(item=>item.str || '').join(' ').replace(/\\s+/g, ' ').trim();
+    if(text) chunks.push('[p.' + p + '] ' + text);
+  }
+  const body = chunks.join('\\n').slice(0, ATTACH_TEXT_LIMIT);
+  return 'PDF 파일: ' + file.name + '\\n페이지: ' + (pdf.numPages || maxPages) + '쪽 중 ' + maxPages + '쪽 읽음\\n내용 일부:\\n' + (body || '텍스트를 찾지 못했어요. 스캔 이미지 PDF라면 핵심 내용을 프롬프트에 함께 적어 주세요.');
 }
 function getImageSize(file){
   return new Promise(resolve=>{
@@ -218,6 +270,12 @@ async function readAttachment(file){
   if(file.type.startsWith('image/')){
     const info = await getImageSize(file);
     return { ...base, kind:'image', preview:info.preview, text:'이미지 파일: ' + file.name + ' · ' + (info.width ? info.width + 'x' + info.height + 'px · ' : '') + formatAttachmentSize(file.size) + '. 화면 구조, 상품, 분위기, 참고자료로 사용할 수 있습니다. 사진 속 글자를 정확히 읽어야 하면 프롬프트에 핵심 내용을 함께 적어 주세요.' };
+  }
+  if(isPdfAttachment(file)){
+    return { ...base, kind:'pdf', text:await readPdfAttachment(file) };
+  }
+  if(isSpreadsheetAttachment(file)){
+    return { ...base, kind:'sheet', text:await readSpreadsheetAttachment(file) };
   }
   if(isTextAttachment(file)){
     let text = await file.text();
