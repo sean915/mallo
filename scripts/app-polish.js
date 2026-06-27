@@ -57,6 +57,7 @@ const appPolishCss = `
     .mtabs{background:rgba(255,255,255,.95);border-bottom-color:#dce9e7}
     .mtab{font-size:14px}
     .mtab.active{color:#0f9f73;border-bottom-color:#0f9f73}
+    body.app-mode #__mlt{display:none}
     .welcome{padding:20px 16px 4px}
     .tools-grid{padding:12px 14px}
     .tcard{min-height:86px;padding:12px}
