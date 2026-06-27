@@ -13,6 +13,76 @@ const BINARY_INFO = {
   linux:     { file: 'neutralino-linux_x64',     exeName: 'app'     },
 };
 
+const DOWNLOAD_AI_BRIDGE = `<script>
+(function(){
+  if(window.__malloAiBridgeInstalled) return;
+  window.__malloAiBridgeInstalled = true;
+  var ko = window["말로"] = window["말로"] || {};
+  var en = window.mallo = window.mallo || ko;
+  var HELP = "로컬 AI를 찾지 못했어요. Ollama를 설치하고 모델을 실행한 뒤 다시 시도하거나, 말로 온라인에서 로그인해 AI 기능을 사용해 주세요.";
+  var BASES = ["http://127.0.0.1:11434", "http://localhost:11434"];
+  var PREFERRED = ["llama3.2", "llama3.1", "qwen2.5", "gemma3", "mistral", "phi4", "phi3"];
+  function storedModel(){ try{ return localStorage.getItem("mallo_local_ai_model") || ""; }catch(e){ return ""; } }
+  function fetchJson(url, options, timeoutMs){
+    var ctrl = new AbortController();
+    var timer = setTimeout(function(){ ctrl.abort(); }, timeoutMs || 8000);
+    options = options || {};
+    options.signal = ctrl.signal;
+    return fetch(url, options).then(function(res){
+      if(!res.ok) throw new Error("HTTP " + res.status);
+      return res.json();
+    }).finally(function(){ clearTimeout(timer); });
+  }
+  async function chooseModel(base){
+    var saved = storedModel();
+    if(saved) return saved;
+    var data = await fetchJson(base + "/api/tags", { method: "GET" }, 2500);
+    var names = ((data && data.models) || []).map(function(m){ return m && m.name; }).filter(Boolean);
+    if(!names.length) throw new Error("설치된 Ollama 모델이 없어요");
+    var picked = names.find(function(name){
+      var lower = String(name).toLowerCase();
+      return PREFERRED.some(function(prefix){ return lower.indexOf(prefix) === 0; });
+    });
+    return picked || names[0];
+  }
+  async function localAi(prompt){
+    var last;
+    for(var i=0;i<BASES.length;i++){
+      var base = BASES[i];
+      try{
+        var model = await chooseModel(base);
+        var data = await fetchJson(base + "/api/generate", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            model: model,
+            prompt: String(prompt || ""),
+            stream: false,
+            options: { temperature: 0.4 }
+          })
+        }, 60000);
+        var text = String((data && (data.response || (data.message && data.message.content))) || "").trim();
+        if(text) return text;
+        throw new Error("빈 응답");
+      }catch(e){ last = e; }
+    }
+    throw last || new Error(HELP);
+  }
+  ko.aiLocal = en.aiLocal = localAi;
+  ko.ai = en.ai = async function(prompt){
+    try{ return await localAi(prompt); }
+    catch(e){ throw new Error(HELP); }
+  };
+})();
+</script>`;
+
+function withDownloadRuntime(html) {
+  const badge = '<a href="https://malloai.com/" target="_blank" rel="noopener" style="position:fixed;right:12px;bottom:12px;z-index:2147483647;background:#3182f6;color:#fff;font:700 12px/1 -apple-system,sans-serif;padding:9px 13px;border-radius:999px;text-decoration:none;box-shadow:0 4px 14px rgba(0,0,0,.18)">⚡ 말로로 만들었어요</a>';
+  const runtime = DOWNLOAD_AI_BRIDGE + badge;
+  if (/<\/body>/i.test(html)) return html.replace(/<\/body>/i, runtime + '</body>');
+  return html + runtime;
+}
+
 export default async function handler(req) {
   if (req.method !== 'POST')
     return new Response('Method not allowed', { status: 405 });
@@ -115,7 +185,7 @@ Powered by 말로 (malloai.com) & Neutralino.js ${NEUTRALINO_VERSION}
   // ZIP 조립: 바이너리 + resources/index.html (파일시스템 모드)
   const zipOut = zipSync({
     [exeName]:                  [binBytes,            { level: 0 }],
-    'resources/index.html':     [strToU8(html.replace(/<\/body>/i, '<a href="https://malloai.com/" target="_blank" rel="noopener" style="position:fixed;right:12px;bottom:12px;z-index:2147483647;background:#3182f6;color:#fff;font:700 12px/1 -apple-system,sans-serif;padding:9px 13px;border-radius:999px;text-decoration:none;box-shadow:0 4px 14px rgba(0,0,0,.18)">⚡ 말로로 만들었어요</a></body>')),       { level: 6 }],
+    'resources/index.html':     [strToU8(withDownloadRuntime(html)),       { level: 6 }],
     'neutralino.config.json':   [strToU8(configJson), { level: 9 }],
     '실행방법.txt':              [strToU8(readme),     { level: 9 }],
   });
