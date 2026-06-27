@@ -10,7 +10,8 @@ const LOCAL_AI_PREVIEW_BRIDGE_SOURCE = "const PREVIEW_AI_BRIDGE = `" + String.ra
     const en = window.mallo = window.mallo || ko;
     const HELP = '로컬 AI를 찾지 못했어요. Ollama를 설치하고 로컬 모델을 실행한 뒤 다시 시도해 주세요. 말로 서버 AI로는 자동 전환되지 않습니다.';
     const BASES = ['http://127.0.0.1:11434', 'http://localhost:11434'];
-    const PREFERRED = ['llama3.2', 'llama3.1', 'qwen2.5', 'gemma3', 'mistral', 'phi4', 'phi3'];
+    const DEFAULT_MODEL = 'gemma3:1b';
+    const PREFERRED = [DEFAULT_MODEL, 'llama3.2:1b', 'llama3.2', 'llama3.1', 'qwen2.5', 'gemma3', 'mistral', 'phi4', 'phi3'];
     function storedModel(){ try{ return localStorage.getItem('mallo_local_ai_model') || ''; }catch(e){ return ''; } }
     function fetchJson(url, options, timeoutMs){
       const ctrl = new AbortController();
@@ -33,6 +34,90 @@ const LOCAL_AI_PREVIEW_BRIDGE_SOURCE = "const PREVIEW_AI_BRIDGE = `" + String.ra
         return PREFERRED.some(prefix=>lower.indexOf(prefix) === 0);
       }) || names[0];
     }
+    function setupInfo(){
+      const ua = navigator.userAgent || '';
+      const platform = navigator.platform || '';
+      if(/Win/i.test(platform + ua)) return { os:'Windows', url:'https://ollama.com/download/windows', install:'Ollama 설치 파일을 다운로드해 실행한 뒤 Ollama 앱을 켜 주세요.' };
+      if(/Mac/i.test(platform + ua)) return { os:'Mac', url:'https://ollama.com/download/mac', install:'Ollama 앱을 설치하고 실행한 뒤 터미널에서 모델을 내려받아 주세요.' };
+      if(/Linux|X11/i.test(platform + ua)) return { os:'Linux', url:'https://ollama.com/download/linux', install:'공식 설치 안내에 따라 Ollama를 설치하고 서비스를 실행해 주세요.' };
+      return { os:'현재 기기', url:'https://ollama.com/download', install:'공식 다운로드 페이지에서 운영체제에 맞는 Ollama를 설치해 주세요.' };
+    }
+    function ensureSetupStyle(){
+      if(document.getElementById('__mallo_ai_setup_style')) return;
+      const style = document.createElement('style');
+      style.id = '__mallo_ai_setup_style';
+      style.textContent = "#__mallo_ai_setup{position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(15,23,42,.45);font-family:Pretendard,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}#__mallo_ai_setup *{box-sizing:border-box}#__mallo_ai_setup_panel{width:min(460px,100%);border-radius:18px;background:#fff;color:#191f28;box-shadow:0 24px 80px rgba(0,0,0,.28);padding:22px}#__mallo_ai_setup h2{margin:0 0 8px;font-size:20px;line-height:1.3}#__mallo_ai_setup p{margin:0;color:#4e5968;font-size:14px;line-height:1.55}#__mallo_ai_setup ol{margin:16px 0;padding-left:20px;color:#333d4b;font-size:14px;line-height:1.6}#__mallo_ai_setup code{display:block;margin:10px 0 0;padding:11px 12px;border-radius:10px;background:#f2f4f6;color:#191f28;font:700 13px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:normal;word-break:break-all}#__mallo_ai_setup_actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}#__mallo_ai_setup button,#__mallo_ai_setup a{appearance:none;border:0;border-radius:10px;padding:10px 12px;font:800 13px/1 Pretendard,-apple-system,sans-serif;text-decoration:none;cursor:pointer}#__mallo_ai_setup .primary{background:#3182f6;color:#fff}#__mallo_ai_setup .ghost{background:#f2f4f6;color:#333d4b}#__mallo_ai_setup .plain{margin-left:auto;background:transparent;color:#6b7684}#__mallo_ai_setup_status{margin-top:12px;padding:10px 12px;border-radius:10px;background:#f8fafc;color:#4e5968;font-size:13px;line-height:1.45}";
+      document.head.appendChild(style);
+    }
+    function copyText(text){
+      if(navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(text);
+      const t = document.createElement('textarea');
+      t.value = text; document.body.appendChild(t); t.select();
+      try{ document.execCommand('copy'); }catch(e){}
+      t.remove();
+      return Promise.resolve();
+    }
+    async function checkLocalAi(){
+      for(const base of BASES){
+        try{
+          const data = await fetchJson(base + '/api/tags', { method:'GET' }, 2500);
+          const names = ((data && data.models) || []).map(m=>m && m.name).filter(Boolean);
+          if(names.length) return { ok:true, detail:'로컬 AI 준비 완료: ' + names[0] };
+          return { ok:false, detail:'Ollama는 켜져 있지만 설치된 모델이 없어요. 아래 모델 명령을 실행해 주세요.' };
+        }catch(e){}
+      }
+      return { ok:false, detail:'Ollama 연결을 찾지 못했어요. 설치 후 Ollama 앱이 실행 중인지 확인해 주세요.' };
+    }
+    function showSetup(reason){
+      ensureSetupStyle();
+      const info = setupInfo();
+      const command = 'ollama run ' + DEFAULT_MODEL;
+      const old = document.getElementById('__mallo_ai_setup');
+      if(old) old.remove();
+      const overlay = document.createElement('div');
+      overlay.id = '__mallo_ai_setup';
+      const panel = document.createElement('div');
+      panel.id = '__mallo_ai_setup_panel';
+      const title = document.createElement('h2');
+      title.textContent = '로컬 AI 설정이 필요해요';
+      const desc = document.createElement('p');
+      desc.textContent = '이 기능은 내 PC의 Ollama만 사용합니다. 말로 서버 AI로 자동 전환되지 않아 토큰 비용이 발생하지 않습니다.';
+      const list = document.createElement('ol');
+      const li1 = document.createElement('li');
+      li1.textContent = info.os + '용 Ollama를 설치하고 실행합니다. ' + info.install;
+      const li2 = document.createElement('li');
+      li2.textContent = '터미널에서 가벼운 기본 모델을 한 번 내려받습니다.';
+      const code = document.createElement('code');
+      code.textContent = command;
+      li2.appendChild(code);
+      const li3 = document.createElement('li');
+      li3.textContent = '설치가 끝나면 다시 확인을 누르고 AI 기능을 다시 실행합니다.';
+      list.appendChild(li1); list.appendChild(li2); list.appendChild(li3);
+      const actions = document.createElement('div');
+      actions.id = '__mallo_ai_setup_actions';
+      const install = document.createElement('a');
+      install.className = 'primary'; install.href = info.url; install.target = '_blank'; install.rel = 'noopener'; install.textContent = 'Ollama 설치';
+      const copy = document.createElement('button');
+      copy.className = 'ghost'; copy.type = 'button'; copy.textContent = '모델 명령 복사';
+      const check = document.createElement('button');
+      check.className = 'ghost'; check.type = 'button'; check.textContent = '다시 확인';
+      const close = document.createElement('button');
+      close.className = 'plain'; close.type = 'button'; close.textContent = '닫기';
+      const status = document.createElement('div');
+      status.id = '__mallo_ai_setup_status';
+      status.textContent = reason || 'Ollama 설치와 모델 준비가 필요합니다.';
+      copy.onclick = ()=>copyText(command).then(()=>{ status.textContent = '모델 설치 명령을 복사했어요.'; });
+      check.onclick = async ()=>{
+        status.textContent = '로컬 AI 상태를 확인하는 중...';
+        const result = await checkLocalAi();
+        status.textContent = result.ok ? result.detail + ' AI 버튼을 다시 눌러 주세요.' : result.detail;
+      };
+      close.onclick = ()=>overlay.remove();
+      actions.appendChild(install); actions.appendChild(copy); actions.appendChild(check); actions.appendChild(close);
+      panel.appendChild(title); panel.appendChild(desc); panel.appendChild(list); panel.appendChild(actions); panel.appendChild(status);
+      overlay.appendChild(panel);
+      document.body.appendChild(overlay);
+    }
     async function localAi(prompt){
       let last;
       for(const base of BASES){
@@ -51,9 +136,11 @@ const LOCAL_AI_PREVIEW_BRIDGE_SOURCE = "const PREVIEW_AI_BRIDGE = `" + String.ra
       throw last || new Error(HELP);
     }
     ko.aiLocal = en.aiLocal = localAi;
+    ko.aiSetup = en.aiSetup = showSetup;
+    ko.aiCheck = en.aiCheck = checkLocalAi;
     ko.ai = en.ai = async function(prompt){
       try{ return await localAi(prompt); }
-      catch(e){ throw new Error(HELP); }
+      catch(e){ showSetup(e && e.message); throw new Error(HELP); }
     };
   }
 ` + "`;\n";
@@ -80,7 +167,13 @@ const LOCAL_AI_PREVIEW_SHIM_SOURCE =
 
 function ensureLocalAiPreviewBridge() {
   const anchor = '/* ================== 생성 코드 ↔ 미리보기 데이터 저장 shim ================== */\n';
-  if (!html.includes('const PREVIEW_AI_BRIDGE = `')) {
+  if (html.includes('const PREVIEW_AI_BRIDGE = `')) {
+    const bridge = /const PREVIEW_AI_BRIDGE = `[\s\S]*?`;\nfunction withShim\(html, seed\)\{/;
+    if (!bridge.test(html)) {
+      throw new Error('patch target not found: existing local AI preview bridge');
+    }
+    html = html.replace(bridge, LOCAL_AI_PREVIEW_BRIDGE_SOURCE + 'function withShim(html, seed){');
+  } else {
     if (!html.includes(anchor + 'function withShim(html, seed){')) {
       throw new Error('patch target not found: local AI preview bridge anchor');
     }
