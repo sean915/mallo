@@ -19,7 +19,7 @@ const DOWNLOAD_AI_BRIDGE = `<script>
   window.__malloAiBridgeInstalled = true;
   var ko = window["말로"] = window["말로"] || {};
   var en = window.mallo = window.mallo || ko;
-  var HELP = "로컬 AI를 찾지 못했어요. Ollama를 설치하고 모델을 실행한 뒤 다시 시도하거나, 말로 온라인에서 로그인해 AI 기능을 사용해 주세요.";
+  var HELP = "로컬 AI를 찾지 못했어요. Ollama를 설치하고 로컬 모델을 실행한 뒤 다시 시도해 주세요. 말로 서버 AI로는 자동 전환되지 않습니다.";
   var BASES = ["http://127.0.0.1:11434", "http://localhost:11434"];
   var PREFERRED = ["llama3.2", "llama3.1", "qwen2.5", "gemma3", "mistral", "phi4", "phi3"];
   function storedModel(){ try{ return localStorage.getItem("mallo_local_ai_model") || ""; }catch(e){ return ""; } }
