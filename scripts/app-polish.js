@@ -35,6 +35,16 @@ const appPolishCss = `
   .inputbar{background:rgba(255,255,255,.94);border-top:1px solid #dce9e7;padding:14px 16px 16px;box-shadow:0 -12px 30px rgba(15,23,42,.05)}
   .inputbox{background:#fff;border:1.5px solid #cfe2df;border-radius:14px;box-shadow:0 12px 24px rgba(15,23,42,.06)}
   .inputbox:focus-within{border-color:#0f9f73;box-shadow:0 0 0 4px rgba(15,159,115,.1)}
+  .attach-btn{width:36px;height:36px;border-radius:10px;background:#eef7f5;color:#0b7b59;font-size:20px;font-weight:900;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+  .attach-btn:hover{background:#ddf3ec}
+  .attach-input{display:none}
+  .attach-list{display:flex;flex-wrap:wrap;gap:7px;margin-top:9px}
+  .attach-item{display:inline-flex;align-items:center;gap:7px;max-width:100%;border:1px solid #dce9e7;background:#f8fbfa;color:#344054;border-radius:999px;padding:6px 8px;font-size:12px;font-weight:700}
+  .attach-item img{width:22px;height:22px;border-radius:6px;object-fit:cover;background:#e9eef2}
+  .attach-item .name{max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .attach-item .meta{color:#7a8793;font-weight:600}
+  .attach-item button{width:20px;height:20px;border-radius:50%;background:#e6ecef;color:#667085;font-weight:900;line-height:1}
+  .attach-item button:hover{background:#d8e2e5;color:#101828}
   .send{background:#101828;border-radius:10px}
   .send:hover{background:#0f9f73}
   .hint{color:#74808b}
@@ -62,6 +72,7 @@ const appPolishCss = `
     .tools-grid{padding:12px 14px}
     .tcard{min-height:86px;padding:12px}
     .empty{padding:24px 18px}
+    .attach-item .name{max-width:112px}
     .site-footer{height:42px;flex-basis:42px}
   }`;
 
@@ -112,6 +123,21 @@ replaceOnce(
 `      <button class=${q}tcard more${q} id=${q}tcMore${q}>직접 말로 만들기</button>`
 );
 
+replaceOnce(
+`        <textarea id=${q}input${q} rows=${q}1${q} placeholder=${q}예) 거래처 연락처 정리하는 표 만들어줘${q}></textarea>
+        <button class=${q}send${q} id=${q}btnSend${q} title=${q}만들기${q}>↑</button>`,
+`        <button class=${q}attach-btn${q} id=${q}btnAttach${q} title=${q}파일 첨부${q} type=${q}button${q}>＋</button>
+        <input class=${q}attach-input${q} id=${q}fileInput${q} type=${q}file${q} accept=${q}image/*,.txt,.csv,.tsv,.json,.md,.html,.xml${q} multiple>
+        <textarea id=${q}input${q} rows=${q}1${q} placeholder=${q}예) 거래처 연락처 정리하는 표 만들어줘${q}></textarea>
+        <button class=${q}send${q} id=${q}btnSend${q} title=${q}만들기${q}>↑</button>`
+);
+
+replaceOnce(
+`      <div class=${q}hint${q}>필요한 걸 한국말로 적으면 돼요 · 만든 뒤 ${q}글자 더 크게 해줘${q}처럼 말로 고칠 수 있어요</div>`,
+`      <div class=${q}attach-list hidden${q} id=${q}attachList${q}></div>
+      <div class=${q}hint${q}>필요한 걸 한국말로 적으면 돼요 · 파일/사진은 참고자료로 첨부할 수 있어요</div>`
+);
+
 if (!html.includes('function maybeEnterAppFromHash()')) {
   replaceOnce(
 `  setTimeout(()=>{ try{ input.focus(); }catch(e){} }, 120);
@@ -145,6 +171,149 @@ initAuth();
 maybeEnterAppFromHash();
 window.addEventListener('hashchange', maybeEnterAppFromHash);
 </script>`
+);
+
+replaceOnce(
+`async function generate(req){
+  if(S.busy) return;`,
+`async function generate(req, meta={}){
+  if(S.busy) return;`
+);
+
+replaceOnce(
+`  addMsg('user', req);`,
+`  addMsg('user', meta.display || req);`
+);
+
+if (!html.includes('function formatAttachmentSize(bytes)')) {
+  replaceOnce(
+`const input = $('input');
+function submit(){`,
+`const ATTACH_MAX_FILES = 3;
+const ATTACH_MAX_BYTES = 5 * 1024 * 1024;
+const ATTACH_TEXT_LIMIT = 1500;
+S.attachments = S.attachments || [];
+
+function formatAttachmentSize(bytes){
+  if(bytes < 1024) return bytes + 'B';
+  if(bytes < 1024 * 1024) return Math.round(bytes / 1024) + 'KB';
+  return (bytes / 1024 / 1024).toFixed(1) + 'MB';
+}
+function isTextAttachment(file){
+  const name = file.name.toLowerCase();
+  return /^text\\//.test(file.type) || /\\.(txt|csv|tsv|json|md|html|xml)$/i.test(name);
+}
+function getImageSize(file){
+  return new Promise(resolve=>{
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = ()=>{ const info = { width:img.naturalWidth, height:img.naturalHeight, preview:url }; resolve(info); };
+    img.onerror = ()=>{ URL.revokeObjectURL(url); resolve({ width:0, height:0, preview:'' }); };
+    img.src = url;
+  });
+}
+async function readAttachment(file){
+  if(file.size > ATTACH_MAX_BYTES) throw new Error(file.name + '은 5MB 이하만 첨부할 수 있어요');
+  const base = { id:Date.now() + '-' + Math.random().toString(16).slice(2), name:file.name, type:file.type || '알 수 없음', size:file.size };
+  if(file.type.startsWith('image/')){
+    const info = await getImageSize(file);
+    return { ...base, kind:'image', preview:info.preview, text:'이미지 파일: ' + file.name + ' · ' + (info.width ? info.width + 'x' + info.height + 'px · ' : '') + formatAttachmentSize(file.size) + '. 화면 구조, 상품, 분위기, 참고자료로 사용할 수 있습니다. 사진 속 글자를 정확히 읽어야 하면 프롬프트에 핵심 내용을 함께 적어 주세요.' };
+  }
+  if(isTextAttachment(file)){
+    let text = await file.text();
+    text = text.replace(/\\u0000/g, '').replace(/\\r\\n/g, '\\n').trim();
+    const lines = text.split('\\n').slice(0, 40).join('\\n');
+    const clipped = lines.slice(0, ATTACH_TEXT_LIMIT);
+    return { ...base, kind:'text', text:'파일명: ' + file.name + '\\n형식: ' + (file.type || 'text') + '\\n내용 일부:\\n' + clipped + (text.length > clipped.length ? '\\n...(이하 생략)' : '') };
+  }
+  return { ...base, kind:'file', text:'파일명: ' + file.name + '\\n형식: ' + (file.type || '알 수 없음') + '\\n크기: ' + formatAttachmentSize(file.size) + '\\n이 파일은 현재 내용 자동 추출 대상이 아니므로, 필요한 핵심 내용을 프롬프트에 함께 적어 주세요.' };
+}
+function renderAttachments(){
+  const list = $('attachList');
+  if(!list) return;
+  list.innerHTML = '';
+  list.classList.toggle('hidden', !S.attachments.length);
+  S.attachments.forEach(item=>{
+    const chip = document.createElement('div');
+    chip.className = 'attach-item';
+    if(item.preview){
+      const img = document.createElement('img');
+      img.src = item.preview;
+      img.alt = '';
+      chip.appendChild(img);
+    }
+    const name = document.createElement('span');
+    name.className = 'name';
+    name.textContent = item.name;
+    const meta = document.createElement('span');
+    meta.className = 'meta';
+    meta.textContent = formatAttachmentSize(item.size);
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.textContent = '×';
+    del.title = '첨부 제거';
+    del.onclick = ()=>{
+      if(item.preview) URL.revokeObjectURL(item.preview);
+      S.attachments = S.attachments.filter(a=>a.id !== item.id);
+      renderAttachments();
+    };
+    chip.appendChild(name);
+    chip.appendChild(meta);
+    chip.appendChild(del);
+    list.appendChild(chip);
+  });
+}
+async function addAttachments(files){
+  const incoming = Array.from(files || []);
+  if(!incoming.length) return;
+  const slots = Math.max(0, ATTACH_MAX_FILES - S.attachments.length);
+  if(incoming.length > slots) toast('첨부는 최대 ' + ATTACH_MAX_FILES + '개까지 가능해요');
+  for(const file of incoming.slice(0, slots)){
+    try{ S.attachments.push(await readAttachment(file)); }
+    catch(e){ toast(e.message || '파일을 읽지 못했어요'); }
+  }
+  renderAttachments();
+}
+function buildAttachmentPrompt(userText){
+  if(!S.attachments.length) return userText;
+  const base = userText || '첨부한 자료를 참고해서 업무용 웹 도구를 만들어줘';
+  const budget = Math.max(700, 3600 - base.length);
+  const refs = S.attachments.map((a, i)=>'[' + (i + 1) + '] ' + a.text).join('\\n\\n').slice(0, budget);
+  return base + '\\n\\n[첨부 참고자료]\\n' + refs + '\\n\\n[첨부 사용 지침]\\n첨부자료의 항목명, 예시 데이터, 화면 구성 단서, 업무 맥락을 반영하되 앱 안에 첨부 원문 전체를 그대로 노출하지 마세요.';
+}
+function attachmentLabel(){
+  return S.attachments.length ? '\\n첨부: ' + S.attachments.map(a=>a.name).join(', ') : '';
+}
+function clearAttachments(){
+  S.attachments.forEach(a=>{ if(a.preview) URL.revokeObjectURL(a.preview); });
+  S.attachments = [];
+  renderAttachments();
+}
+
+const input = $('input');
+function submit(){`
+  );
+}
+
+replaceOnce(
+`  const v = input.value.trim();
+  if(!v || S.busy) return;
+  input.value = ''; input.style.height = 'auto';
+  generate(v);`,
+`  const v = input.value.trim();
+  if((!v && !S.attachments.length) || S.busy) return;
+  const display = (v || '첨부한 자료를 참고해서 도구 만들어줘') + attachmentLabel();
+  const prompt = buildAttachmentPrompt(v);
+  input.value = ''; input.style.height = 'auto';
+  clearAttachments();
+  generate(prompt, { display });`
+);
+
+replaceOnce(
+`$('btnSend').onclick = submit;`,
+`$('btnSend').onclick = submit;
+$('btnAttach') && ($('btnAttach').onclick = ()=>$('fileInput').click());
+$('fileInput') && ($('fileInput').onchange = e=>{ addAttachments(e.target.files); e.target.value = ''; });`
 );
 
 writeFileSync(path, html);
