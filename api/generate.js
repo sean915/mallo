@@ -30,9 +30,9 @@ const SYSTEM_PROMPT = `당신은 한국어 요구사항을 받아 "실무에서 
 19. 사용법: \`const 결과 = await window.말로.ai("다음 회의록을 3줄로 요약해줘:\\n" + 입력텍스트);\` — 프롬프트(문자열) 하나를 받아 AI가 만든 텍스트(문자열)를 Promise로 돌려줌. 반드시 await와 try/catch로 감싸고, 호출 동안 버튼 비활성화·"AI가 처리 중…" 로딩 표시를 넣을 것.
 20. window.말로 가 없을 수도 있으니(\`if(window.말로&&window.말로.ai)\`) 방어적으로 호출하고, 없거나 실패하면 사용자에게 친절한 한국어 안내를 보여줄 것. AI 호출 결과는 그대로 화면에 예쁘게 표시.
 
-[프롬프트 정제 결과 사용]
-21. 사용자 원문과 함께 제공되는 "내부 정제 프롬프트"가 있으면, 그것을 제품 기획서처럼 읽고 누락된 화면·필드·데이터·검증·사용 흐름을 보완해 구현할 것.
-22. 정제 프롬프트에 확인 질문이 포함되어 있더라도 최종 앱 안에 질문을 노출하지 말고, 함께 적힌 기본 가정을 사용해 즉시 완성품을 만들 것.
+[AppSpec 사용]
+21. 사용자 원문과 함께 제공되는 "내부 AppSpec"이 있으면, 그것을 제품 설계도처럼 읽고 의도·데이터 구조·화면·기능·검증·사용 흐름·샘플 데이터를 빠짐없이 구현할 것.
+22. AppSpec의 assumptions는 사용자가 답하지 않은 부분에 대한 기본 가정이다. 최종 앱 안에 질문을 노출하지 말고, 해당 가정으로 즉시 완성품을 만들 것.
 23. 기존 코드가 주어지면 요청된 수정만 반영한 전체 코드를 다시 출력할 것(기존 디자인 품질은 유지/향상).
 
 [백엔드가 필요한 요청 — 프로토타입 + 솔직한 안내]
@@ -42,14 +42,16 @@ const SYSTEM_PROMPT = `당신은 한국어 요구사항을 받아 "실무에서 
 
 27. 키가 필요하거나 브라우저 CORS 정책으로 막히는 외부 API(예: 유튜브 데이터 API, 외부 검색·데이터 API 등)는 window.말로.fetch(url, options)로 호출한다. 이는 말로 서버를 경유하는 프록시라 API 키를 노출하지 않고 안전하게 호출된다. 사용법: const r = await window.말로.fetch(API_URL); 이후 r.data(JSON이면 파싱된 객체) 또는 r.raw(원문 문자열)와 r.status를 사용한다. 단, 이 기능은 말로 온라인 앱에서만 동작하며 내려받은 단독 실행 파일에서는 동작하지 않는다. 따라서 반드시 if(window.말로 && window.말로.fetch){ ... } 로 사용 가능 여부를 먼저 확인하고, 사용할 수 없으면 사용자에게 '이 기능은 말로 온라인에서만 동작해요' 같은 친절한 대체 안내를 보여준다. 허용된 외부 호스트로만 요청이 나간다.`;
 
-const PROMPT_REWRITE_SYSTEM = `당신은 말로(Mallo)의 숨겨진 프롬프트 정제 엔진입니다.
-사용자가 짧고 모호하게 입력한 한국어 요청을, 생성 모델이 한 번에 완성도 높은 웹 도구를 만들 수 있는 "정제된 제작 프롬프트"로 바꿉니다.
+const APP_SPEC_SYSTEM = `당신은 말로(Mallo)의 숨겨진 의도 분석/AppSpec 엔진입니다.
+사용자가 짧고 모호하게 입력한 요청을, 생성 모델이 한 번에 의도에 가까운 완성형 소프트웨어를 만들 수 있는 구조화된 AppSpec(JSON)으로 바꿉니다.
 
 [목표]
 - input: 사용자가 실제로 입력한 문장
-- output: 생성 모델에 다시 넘길 정제 프롬프트
+- output: 생성 모델에 다시 넘길 AppSpec JSON
 - 사용자의 원래 의도를 보존하되, 빠진 세부사항은 실무적으로 가장 자연스러운 기본값으로 채웁니다.
-- 과한 기능 추가보다, 바로 쓸 수 있는 완성품에 필요한 필수 기능을 정확히 잡습니다.
+- 과한 기능 추가보다, 바로 쓸 수 있는 하나의 완성된 프로그램에 필요한 핵심 기능을 정확히 잡습니다.
+- 목표는 최소 프롬프트와 최소 API 호출로 사용자의 의도에 가장 가까운 단일 결과물을 만들게 하는 것입니다.
+- 우선순위는 1) 사용자가 만족할 품질과 의도 적합성, 2) API 호출·토큰 절약입니다. 토큰을 아끼기 위해 핵심 기능·검증·샘플 데이터·사용 흐름을 생략하지 마세요.
 
 [반드시 추론할 것]
 1. 사용자가 진짜 만들고 싶은 도구의 목적과 대상 사용자
@@ -61,32 +63,64 @@ const PROMPT_REWRITE_SYSTEM = `당신은 말로(Mallo)의 숨겨진 프롬프트
 7. 샘플 데이터: 한국어 현실 데이터 5~8개
 8. 디자인 방향: 전문적인 SaaS 느낌, 반응형, 접근성, 모바일 사용성
 9. 기존 앱 수정 요청이라면 기존 기능을 깨지 않고 바꿔야 할 부분과 유지해야 할 부분
+10. 브라우저 단독으로 가능한 범위와, 실제 서버/결제/회원/외부 API가 필요한 부분의 체험용 대체 방식
 
 [질문 정책]
-- 대부분의 요청은 질문하지 말고 합리적 기본 가정으로 바로 만들 수 있게 정제합니다.
-- 답이 없으면 완전히 다른 제품이 되는 핵심 선택이 빠진 경우에만 "확인 질문"을 최대 3개 적습니다.
-- 확인 질문을 적더라도 반드시 "기본 가정"을 함께 적어, 답변 없이도 생성 모델이 완성품을 만들 수 있게 합니다.
+- 질문을 만들지 않습니다. 답이 없으면 assumptions에 합리적 기본 가정을 적어 즉시 만들 수 있게 합니다.
+- 사용자의 의도가 여러 갈래일 때도 가장 흔하고 실무적인 1개 방향으로 좁힙니다.
+- 같은 요청에서 여러 프로그램 후보가 보이면 primaryIntent 하나를 선택하고 나머지는 excludedIntents로 보냅니다.
 
 [출력 형식]
-아래 섹션명만 사용하고, 한국어로 간결하게 작성하세요. 코드는 절대 쓰지 마세요.
-
-정제 프롬프트:
-- 의도:
-- 만들 제품:
-- 핵심 사용자 흐름:
-- 화면 구성:
-- 데이터/입력 필드:
-- 필수 기능:
-- 검증/오류 방지:
-- 샘플 데이터:
-- 디자인 기준:
-- 완료 기준:
-
-확인 질문(정말 필요할 때만):
-- 
-
-기본 가정:
-- `;
+반드시 JSON 객체 하나만 출력하세요. 마크다운, 코드블록, 설명 문장 금지. 모든 값은 한국어로 작성하세요.
+스키마:
+{
+  "version": 1,
+  "taskType": "create | edit",
+  "primaryIntent": "사용자의 핵심 의도 한 문장",
+  "excludedIntents": ["이번 결과물에서 제외할 부가 의도"],
+  "app": {
+    "title": "앱 이름",
+    "type": "crm | ledger | inventory | booking | calculator | document | kanban | memo | ecommerce | game | dashboard | custom",
+    "audience": "주 사용자",
+    "jobToBeDone": "사용자가 이 앱으로 끝내려는 일",
+    "successMoment": "사용자가 완성됐다고 느끼는 순간"
+  },
+  "entities": [
+    {
+      "name": "영문 식별자",
+      "label": "한국어 이름",
+      "fields": [
+        { "name": "영문 식별자", "label": "한국어 라벨", "type": "text | number | date | time | select | textarea | boolean | currency", "required": true, "options": [], "validation": "검증 규칙" }
+      ]
+    }
+  ],
+  "views": [
+    { "id": "영문 식별자", "name": "화면 이름", "purpose": "목적", "components": ["헤더", "입력 폼", "목록", "요약 카드"] }
+  ],
+  "workflows": ["사용자가 실제로 앱을 쓰는 순서"],
+  "features": {
+    "core": ["반드시 동작해야 하는 기능"],
+    "secondary": ["있으면 좋은 기능 중 꼭 필요한 것만"],
+    "persistence": "localStorage 자동 저장/복원",
+    "export": "CSV/인쇄/복사 등 필요한 내보내기",
+    "ai": "내장 AI가 필요한 경우 window.말로.ai 사용, 없으면 빈 문자열"
+  },
+  "sampleData": {
+    "count": 6,
+    "description": "샘플 데이터 방향"
+  },
+  "validation": ["빈 값, 숫자, 날짜, 중복, 삭제 확인 등 오류 방지"],
+  "design": {
+    "tone": "자연스럽고 신뢰감 있는 업무용 한국어",
+    "layout": "추천 레이아웃",
+    "density": "compact | balanced | spacious",
+    "mobile": "모바일에서의 우선순위"
+  },
+  "browserOnlyFallbacks": ["브라우저 단독으로 불가능한 요구의 체험용 대체 방식"],
+  "assumptions": ["사용자가 말하지 않은 부분에 대한 기본 가정"],
+  "acceptanceCriteria": ["완성 판정 기준"],
+  "editPlan": ["기존 앱 수정 요청일 때 유지/변경할 점"]
+}`;
 
 // 자동 모델 선택: 사용자는 모델을 고르지 않음. 요청 난이도를 보고 Sonnet/Opus 자동 결정.
 //  - 기본은 Sonnet(저렴·빠름)
@@ -109,9 +143,28 @@ function pickClaudeModel(prompt, hasCode) {
   return opus;
 }
 
-async function callPromptRewriter(provider, apiKey, modelName, prompt, hasCode, signal) {
+function normalizeAppSpec(text) {
+  if (typeof text !== 'string') return null;
+  let raw = text.trim();
+  if (!raw) return null;
+  raw = raw.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
+  const start = raw.indexOf('{');
+  const end = raw.lastIndexOf('}');
+  const candidate = start !== -1 && end > start ? raw.slice(start, end + 1) : raw;
+  try {
+    const parsed = JSON.parse(candidate);
+    return JSON.stringify(parsed, null, 2).slice(0, 6500);
+  } catch {
+    return raw.slice(0, 5000);
+  }
+}
+
+async function callAppSpecBuilder(provider, apiKey, modelName, prompt, hasCode, signal) {
   const task = hasCode ? '기존 앱 수정 요청' : '새 웹 도구 생성 요청';
-  const userText = `작업 유형: ${task}\n사용자 원문:\n${prompt}`;
+  const userText = `작업 유형: ${task}
+목표: 최소한의 사용자 프롬프트로 가장 의도에 가까운 하나의 완성된 SW 프로그램을 만들기 위한 AppSpec을 작성하세요.
+사용자 원문:
+${prompt}`;
 
   if (provider === 'claude') {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -120,16 +173,16 @@ async function callPromptRewriter(provider, apiKey, modelName, prompt, hasCode, 
       signal,
       body: JSON.stringify({
         model: modelName,
-        max_tokens: 1400,
+        max_tokens: 2200,
         temperature: 0.2,
-        system: PROMPT_REWRITE_SYSTEM,
+        system: APP_SPEC_SYSTEM,
         messages: [{ role: 'user', content: userText }],
       }),
     });
     if (!res.ok) return null;
     const j = await res.json();
     const text = Array.isArray(j.content) ? j.content.map((p) => p.text).filter(Boolean).join('').trim() : '';
-    return text || null;
+    return normalizeAppSpec(text);
   }
 
   if (provider === 'openai') {
@@ -140,16 +193,16 @@ async function callPromptRewriter(provider, apiKey, modelName, prompt, hasCode, 
       body: JSON.stringify({
         model: modelName,
         temperature: 0.2,
-        max_tokens: 1400,
+        max_tokens: 2200,
         messages: [
-          { role: 'system', content: PROMPT_REWRITE_SYSTEM },
+          { role: 'system', content: APP_SPEC_SYSTEM },
           { role: 'user', content: userText },
         ],
       }),
     });
     if (!res.ok) return null;
     const j = await res.json();
-    return j.choices?.[0]?.message?.content?.trim() || null;
+    return normalizeAppSpec(j.choices?.[0]?.message?.content);
   }
 
   const res = await fetch(
@@ -159,9 +212,9 @@ async function callPromptRewriter(provider, apiKey, modelName, prompt, hasCode, 
       headers: { 'content-type': 'application/json' },
       signal,
       body: JSON.stringify({
-        systemInstruction: { parts: [{ text: PROMPT_REWRITE_SYSTEM }] },
+        systemInstruction: { parts: [{ text: APP_SPEC_SYSTEM }] },
         contents: [{ role: 'user', parts: [{ text: userText }] }],
-        generationConfig: { temperature: 0.2, maxOutputTokens: 1400 },
+        generationConfig: { temperature: 0.2, maxOutputTokens: 2200 },
       }),
     }
   );
@@ -169,21 +222,26 @@ async function callPromptRewriter(provider, apiKey, modelName, prompt, hasCode, 
   const j = await res.json();
   const parts = j.candidates?.[0]?.content?.parts;
   const text = Array.isArray(parts) ? parts.map((p) => p.text).filter(Boolean).join('').trim() : '';
-  return text || null;
+  return normalizeAppSpec(text);
 }
 
-// 숨은 프롬프트 정제: 사용자 원문 → 생성 모델용 정제 프롬프트.
-// 실패하면 null 반환 → 시스템 프롬프트의 기본 정제 규칙 + 원본 요청으로 계속 진행.
-async function boostPrompt(prompt, hasCode) {
-  if (env('PROMPT_BOOST', '1') === '0' || env('PROMPT_REWRITE', '1') === '0') return null;
+// 숨은 AppSpec 단계: 사용자 원문 → 생성 모델용 제품 설계도(JSON).
+// 기존 PROMPT_REWRITE_* 환경변수도 계속 지원해 배포 설정을 깨지 않는다.
+// 실패하면 null 반환 → 생성 모델이 시스템 프롬프트의 AppSpec 규칙을 내부적으로 수행.
+async function buildAppSpec(prompt, hasCode) {
+  if (env('APP_SPEC', '1') === '0' || env('PROMPT_BOOST', '1') === '0' || env('PROMPT_REWRITE', '1') === '0') return null;
 
-  const explicitKey = env('PROMPT_REWRITE_API_KEY', '');
+  const explicitKey = env('APP_SPEC_API_KEY', '') || env('PROMPT_REWRITE_API_KEY', '');
+  const primaryKey = env('LLM_API_KEY', '');
   const fallbackKey = env('LLM_FALLBACK_API_KEY', '');
   const geminiKey = env('AI_API_KEY', '');
-  const primaryKey = env('LLM_API_KEY', '');
 
-  let provider = env('PROMPT_REWRITE_PROVIDER', '');
+  let provider = env('APP_SPEC_PROVIDER', '') || env('PROMPT_REWRITE_PROVIDER', '');
   let apiKey = explicitKey;
+  if (!apiKey && primaryKey) {
+    provider = provider || env('LLM_PROVIDER', 'gemini');
+    apiKey = primaryKey;
+  }
   if (!apiKey && fallbackKey) {
     provider = provider || env('LLM_FALLBACK_PROVIDER', 'gemini');
     apiKey = fallbackKey;
@@ -192,26 +250,21 @@ async function boostPrompt(prompt, hasCode) {
     provider = provider || 'gemini';
     apiKey = geminiKey;
   }
-  if (!apiKey && primaryKey) {
-    provider = provider || env('LLM_PROVIDER', 'gemini');
-    apiKey = primaryKey;
-  }
   if (!apiKey) return null;
   provider = provider || 'gemini';
 
   const defaultModel = provider === 'claude'
-    ? env('LLM_MODEL_SIMPLE', env('LLM_MODEL', 'claude-sonnet-4-6'))
+    ? env('LLM_MODEL_COMPLEX', env('LLM_MODEL', 'claude-opus-4-8'))
     : provider === 'openai'
-      ? env('PROMPT_REWRITE_OPENAI_MODEL', 'gpt-4o-mini')
-      : env('BOOST_MODEL', 'gemini-2.5-flash');
-  const model = env('PROMPT_REWRITE_MODEL', defaultModel);
+      ? env('LLM_MODEL', env('PROMPT_REWRITE_OPENAI_MODEL', 'gpt-4o'))
+      : env('LLM_MODEL', env('BOOST_MODEL', 'gemini-2.5-flash'));
+  const model = env('APP_SPEC_MODEL', env('PROMPT_REWRITE_MODEL', defaultModel));
 
   let timer;
   try {
     const ctrl = new AbortController();
-    timer = setTimeout(() => ctrl.abort(), Number(env('PROMPT_REWRITE_TIMEOUT_MS', '9000')));
-    const text = await callPromptRewriter(provider, apiKey, model, prompt, hasCode, ctrl.signal);
-    return typeof text === 'string' && text.trim() ? text.trim().slice(0, 5000) : null;
+    timer = setTimeout(() => ctrl.abort(), Number(env('APP_SPEC_TIMEOUT_MS', env('PROMPT_REWRITE_TIMEOUT_MS', '12000'))));
+    return await callAppSpecBuilder(provider, apiKey, model, prompt, hasCode, ctrl.signal);
   } catch {
     return null;
   } finally {
@@ -219,15 +272,15 @@ async function boostPrompt(prompt, hasCode) {
   }
 }
 
-function buildUserPrompt(prompt, code, refinedPrompt) {
-  const hiddenRefine = refinedPrompt
-    ? `\n\n[내부 정제 프롬프트 — 사용자에게 보이지 않음]\n${refinedPrompt}\n\n[실행 규칙]\n- 사용자 원문이 최우선입니다. 정제 프롬프트는 빠진 세부사항을 채우는 제작 지시서로 사용하세요.\n- 확인 질문이 있더라도, 기본 가정으로 바로 완성품을 구현하세요.\n- 최종 출력에는 내부 정제 과정이나 질문 목록을 설명하지 말고 완성된 HTML만 내세요.`
-    : `\n\n[내부 정제 규칙 — 사용자에게 보이지 않음]\n사용자 요청을 먼저 의도, 필드, 화면, 기능, 검증, 샘플 데이터, 디자인 기준으로 스스로 정제한 뒤 구현하세요. 모호한 부분은 가장 실무적인 기본값으로 결정하고 완성품을 만드세요.`;
+function buildUserPrompt(prompt, code, appSpec) {
+  const hiddenSpec = appSpec
+    ? `\n\n[내부 AppSpec — 사용자에게 보이지 않음]\n${appSpec}\n\n[실행 규칙]\n- 사용자 원문이 최우선입니다. AppSpec은 의도·데이터 구조·화면·기능·검증·샘플 데이터를 안정적으로 구현하기 위한 설계도입니다.\n- 1순위는 사용자 의도에 맞는 만족스러운 품질입니다. 토큰 절약 때문에 핵심 기능, 검증, 저장, 샘플 데이터, 사용 흐름을 생략하지 마세요.\n- AppSpec의 assumptions는 기본 가정으로 사용하고, 앱 안에 질문을 노출하지 마세요.\n- excludedIntents는 이번 단일 결과물에 넣지 마세요.\n- acceptanceCriteria를 모두 만족하는 완성된 단일 HTML 프로그램만 출력하세요.\n- 최종 출력에는 내부 AppSpec이나 분석 과정을 설명하지 말고 완성된 HTML만 내세요.`
+    : `\n\n[내부 AppSpec 규칙 — 사용자에게 보이지 않음]\n사용자 요청을 먼저 primaryIntent, entities, views, workflows, features, validation, sampleData, design, assumptions, acceptanceCriteria로 스스로 구조화한 뒤 구현하세요. 모호한 부분은 가장 실무적인 기본값으로 결정하고, 품질을 우선해 하나의 완성품을 만드세요.`;
 
   if (code) {
-    return `기존 앱 코드:\n\`\`\`html\n${code}\n\`\`\`\n\n사용자 원문 수정 요청: ${prompt}${hiddenRefine}`;
+    return `기존 앱 코드:\n\`\`\`html\n${code}\n\`\`\`\n\n사용자 원문 수정 요청: ${prompt}${hiddenSpec}`;
   }
-  return `사용자 원문 요청: ${prompt}${hiddenRefine}`;
+  return `사용자 원문 요청: ${prompt}${hiddenSpec}`;
 }
 
 async function restoreGeneration(uid, quota) {
@@ -323,9 +376,10 @@ export default async function handler(req) {
     return json({ error: MSG[rcode] || MSG.no_credit, code: rcode }, status);
   }
 
-  // 4. 프롬프트 정제: 사용자 원문을 서버 내부에서 제작 지시서로 바꾼 뒤 실제 생성 모델에 전달.
-  const spec = await boostPrompt(prompt, !!code);
-  const userPrompt = buildUserPrompt(prompt, code, spec);
+  // 4. AppSpec 생성: 기존 숨은 정제 호출 1회를 구조화된 의도 분석 단계로 사용한다.
+  //    별도 API 호출을 추가하지 않고, 사용자 원문을 SW 설계도(JSON)로 정리한 뒤 생성 모델에 전달.
+  const appSpec = await buildAppSpec(prompt, !!code);
+  const userPrompt = buildUserPrompt(prompt, code, appSpec);
   const sysPrompt = (lang === 'en') ? SYSTEM_PROMPT + ' [OUTPUT LANGUAGE: ENGLISH — TOP PRIORITY] The user is an English speaker. Generate the ENTIRE tool in natural fluent English: every UI label, heading, button, placeholder, message, empty state, and ALL sample data must be in English. Use $ (USD) as the default currency and MM/DD/YYYY date format. Never output Korean. This overrides any earlier instruction about writing in Korean.' : SYSTEM_PROMPT;
 
   // 5. LLM 호출 (서버 환경변수의 키 사용 — 클라이언트는 모름)
