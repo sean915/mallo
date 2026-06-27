@@ -3,6 +3,110 @@ import { readFileSync, writeFileSync } from 'node:fs';
 const path = 'index.html';
 let html = readFileSync(path, 'utf8').replace(/\r\n/g, '\n');
 
+const LOCAL_AI_PREVIEW_BRIDGE_SOURCE = "const PREVIEW_AI_BRIDGE = `" + String.raw`
+  if(!window.__malloAiBridgeInstalled){
+    window.__malloAiBridgeInstalled = true;
+    const ko = window.말로 = window.말로 || {};
+    const en = window.mallo = window.mallo || ko;
+    const HELP = '로컬 AI를 찾지 못했어요. Ollama를 실행하거나 말로 온라인에서 로그인해 AI 기능을 사용해 주세요.';
+    const BASES = ['http://127.0.0.1:11434', 'http://localhost:11434'];
+    const PREFERRED = ['llama3.2', 'llama3.1', 'qwen2.5', 'gemma3', 'mistral', 'phi4', 'phi3'];
+    function storedModel(){ try{ return localStorage.getItem('mallo_local_ai_model') || ''; }catch(e){ return ''; } }
+    function fetchJson(url, options, timeoutMs){
+      const ctrl = new AbortController();
+      const timer = setTimeout(()=>ctrl.abort(), timeoutMs || 8000);
+      options = options || {};
+      options.signal = ctrl.signal;
+      return fetch(url, options).then(res=>{
+        if(!res.ok) throw new Error('HTTP ' + res.status);
+        return res.json();
+      }).finally(()=>clearTimeout(timer));
+    }
+    async function chooseModel(base){
+      const saved = storedModel();
+      if(saved) return saved;
+      const data = await fetchJson(base + '/api/tags', { method:'GET' }, 2500);
+      const names = ((data && data.models) || []).map(m=>m && m.name).filter(Boolean);
+      if(!names.length) throw new Error('설치된 Ollama 모델이 없어요');
+      return names.find(name=>{
+        const lower = String(name).toLowerCase();
+        return PREFERRED.some(prefix=>lower.indexOf(prefix) === 0);
+      }) || names[0];
+    }
+    async function localAi(prompt){
+      let last;
+      for(const base of BASES){
+        try{
+          const model = await chooseModel(base);
+          const data = await fetchJson(base + '/api/generate', {
+            method:'POST',
+            headers:{ 'content-type':'application/json' },
+            body: JSON.stringify({ model, prompt:String(prompt || ''), stream:false, options:{ temperature:0.4 } })
+          }, 60000);
+          const text = String((data && (data.response || (data.message && data.message.content))) || '').trim();
+          if(text) return text;
+          throw new Error('빈 응답');
+        }catch(e){ last = e; }
+      }
+      throw last || new Error(HELP);
+    }
+    function onlineAi(prompt){
+      return new Promise((resolve,reject)=>{
+        if(!parent || parent === window){ reject(new Error(HELP)); return; }
+        const id = Math.random().toString(36).slice(2);
+        listeners[id] = { resolve, reject };
+        try{ parent.postMessage({__mallo:'ai',id,prompt:String(prompt||'')},'*'); }
+        catch(e){ delete listeners[id]; reject(e); return; }
+        setTimeout(()=>{ if(listeners[id]){ delete listeners[id]; reject(new Error('AI 응답 시간이 초과됐어요')); }},60000);
+      });
+    }
+    ko.aiLocal = en.aiLocal = localAi;
+    ko.ai = en.ai = async function(prompt){
+      try{ return await localAi(prompt); }
+      catch(localError){
+        try{ return await onlineAi(prompt); }
+        catch(e){ throw new Error(HELP); }
+      }
+    };
+  }
+` + "`;\n";
+
+const LOCAL_AI_PREVIEW_SHIM_SOURCE =
+  "  const shim = `<script>\n" +
+  "(function(){\n" +
+  "  const SEED=${seedJson};\n" +
+  "  const KEY='__mallo_internal__';\n" +
+  "  const listeners=[];\n" +
+  "  const memory={};\n" +
+  "  function post(){ try{ parent.postMessage({__mallo:'data',data:memory},'*'); }catch(e){} }\n" +
+  "  function patch(){\n" +
+  "    const rawSet=localStorage.setItem.bind(localStorage), rawGet=localStorage.getItem.bind(localStorage), rawRemove=localStorage.removeItem.bind(localStorage);\n" +
+  "    localStorage.setItem=function(k,v){ memory[k]=v; post(); try{return rawSet(k,v)}catch(e){} };\n" +
+  "    localStorage.getItem=function(k){ if(Object.prototype.hasOwnProperty.call(memory,k)) return memory[k]; try{return rawGet(k)}catch(e){return null} };\n" +
+  "    localStorage.removeItem=function(k){ delete memory[k]; post(); try{return rawRemove(k)}catch(e){} };\n" +
+  "  }\n" +
+  "  try{ Object.assign(memory, SEED||{}); patch(); }catch(e){}\n" +
+  "${PREVIEW_AI_BRIDGE}\n" +
+  "  window.addEventListener('message',e=>{ const d=e.data; if(d&&d.__mallo==='ai_result'&&listeners[d.id]){ const l=listeners[d.id]; delete listeners[d.id]; d.error?l.reject(new Error(d.error)):l.resolve(d.text||''); } });\n" +
+  "})();\n" +
+  "<\\/script>`;";
+
+function ensureLocalAiPreviewBridge() {
+  const anchor = '/* ================== 생성 코드 ↔ 미리보기 데이터 저장 shim ================== */\n';
+  if (!html.includes('const PREVIEW_AI_BRIDGE = `')) {
+    if (!html.includes(anchor + 'function withShim(html, seed){')) {
+      throw new Error('patch target not found: local AI preview bridge anchor');
+    }
+    html = html.replace(anchor + 'function withShim(html, seed){', anchor + LOCAL_AI_PREVIEW_BRIDGE_SOURCE + 'function withShim(html, seed){');
+  }
+  if (html.includes('window.말로.ai = window.mallo.ai = function(prompt)')) {
+    const oldShim = /  const shim = `<script>\\n\(function\(\)\{\\n  const SEED=\$\{seedJson\};[\s\S]*?\\n<\\\/script>`;/;
+    if (!oldShim.test(html)) throw new Error('patch target not found: local AI preview shim');
+    html = html.replace(oldShim, LOCAL_AI_PREVIEW_SHIM_SOURCE);
+  }
+}
+ensureLocalAiPreviewBridge();
+
 function replaceOnce(before, after, label) {
   if (html.includes(after)) return;
   if (!html.includes(before)) {
