@@ -14,16 +14,15 @@ if(!window.__malloAiBridgeInstalled){
 window.__malloAiBridgeInstalled=true;
 var ko=window["\\uB9D0\\uB85C"]=window["\\uB9D0\\uB85C"]||{};
 var en=window.mallo=window.mallo||ko;
-var HELP="로컬 AI를 찾지 못했어요. Ollama를 실행하거나 말로 온라인에서 로그인해 AI 기능을 사용해 주세요.";
+var HELP="로컬 AI를 찾지 못했어요. Ollama를 설치하고 로컬 모델을 실행한 뒤 다시 시도해 주세요. 말로 서버 AI로는 자동 전환되지 않습니다.";
 var BASES=["http://127.0.0.1:11434","http://localhost:11434"];
 var PREFERRED=["llama3.2","llama3.1","qwen2.5","gemma3","mistral","phi4","phi3"];
 function storedModel(){try{return localStorage.getItem("mallo_local_ai_model")||"";}catch(e){return "";}}
 function fetchJson(url,options,timeoutMs){var ctrl=new AbortController();var timer=setTimeout(function(){ctrl.abort();},timeoutMs||8000);options=options||{};options.signal=ctrl.signal;return fetch(url,options).then(function(res){if(!res.ok)throw new Error("HTTP "+res.status);return res.json();}).finally(function(){clearTimeout(timer);});}
 async function chooseModel(base){var saved=storedModel();if(saved)return saved;var data=await fetchJson(base+"/api/tags",{method:"GET"},2500);var names=((data&&data.models)||[]).map(function(m){return m&&m.name;}).filter(Boolean);if(!names.length)throw new Error("설치된 Ollama 모델이 없어요");var picked=names.find(function(name){var lower=String(name).toLowerCase();return PREFERRED.some(function(prefix){return lower.indexOf(prefix)===0;});});return picked||names[0];}
 async function localAi(prompt){var last;for(var i=0;i<BASES.length;i++){var base=BASES[i];try{var model=await chooseModel(base);var data=await fetchJson(base+"/api/generate",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({model:model,prompt:String(prompt||""),stream:false,options:{temperature:.4}})},60000);var text=String((data&&(data.response||(data.message&&data.message.content)))||"").trim();if(text)return text;throw new Error("빈 응답");}catch(e){last=e;}}throw last||new Error(HELP);}
-function onlineAi(prompt){return new Promise(function(resolve,reject){if(!parent||parent===window)return reject(new Error(HELP));var id=Math.random().toString(36).slice(2);listeners[id]={resolve:resolve,reject:reject};try{parent.postMessage({__mallo:"ai",id:id,prompt:String(prompt==null?"":prompt)},"*");}catch(e){delete listeners[id];reject(e);return;}setTimeout(function(){if(listeners[id]){delete listeners[id];reject(new Error("AI 응답 시간 초과"));}},60000);});}
 ko.aiLocal=en.aiLocal=localAi;
-ko.ai=en.ai=async function(prompt){try{return await localAi(prompt);}catch(localError){try{return await onlineAi(prompt);}catch(e){throw new Error(HELP);}}};
+ko.ai=en.ai=async function(prompt){try{return await localAi(prompt);}catch(e){throw new Error(HELP);}};
 }`;
 
 const page = (tool) => {
@@ -127,18 +126,7 @@ async function initSession(){
 
 async function handleAiRequest(id, prompt){
   const reply = (payload)=>{ try{ frame.contentWindow && frame.contentWindow.postMessage(Object.assign({ __mallo:'ai-result', id }, payload), '*'); }catch(e){} };
-  if(!prompt || !String(prompt).trim()){ reply({ error:'내용을 입력해 주세요' }); return; }
-  if(!session){ reply({ error:'AI 기능은 로그인 후 사용할 수 있어요' }); return; }
-  try{
-    const res = await fetch('/api/ai', {
-      method:'POST',
-      headers:{ 'content-type':'application/json', authorization:'Bearer ' + session.access_token },
-      body: JSON.stringify({ prompt: String(prompt).slice(0, 12000) }),
-    });
-    const j = await res.json().catch(()=>({}));
-    if(!res.ok){ reply({ error: j.error || 'AI 처리에 실패했어요' }); return; }
-    reply({ text: j.text || '' });
-  }catch(e){ reply({ error:'AI 연결에 실패했어요' }); }
+  reply({ error:'이 도구의 AI 기능은 로컬 AI(Ollama)만 사용합니다. 말로 서버 AI로는 자동 전환되지 않습니다.' });
 }
 
 window.addEventListener('message', (e)=>{
