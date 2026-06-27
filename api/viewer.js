@@ -9,6 +9,23 @@ const notFoundHtml = `<!DOCTYPE html>
   <div>도구를 찾을 수 없어요.<br>링크가 만료됐거나 비공개 도구일 수 있어요.</div>
 </body></html>`;
 
+const VIEWER_AI_BRIDGE = `
+if(!window.__malloAiBridgeInstalled){
+window.__malloAiBridgeInstalled=true;
+var ko=window["\\uB9D0\\uB85C"]=window["\\uB9D0\\uB85C"]||{};
+var en=window.mallo=window.mallo||ko;
+var HELP="로컬 AI를 찾지 못했어요. Ollama를 실행하거나 말로 온라인에서 로그인해 AI 기능을 사용해 주세요.";
+var BASES=["http://127.0.0.1:11434","http://localhost:11434"];
+var PREFERRED=["llama3.2","llama3.1","qwen2.5","gemma3","mistral","phi4","phi3"];
+function storedModel(){try{return localStorage.getItem("mallo_local_ai_model")||"";}catch(e){return "";}}
+function fetchJson(url,options,timeoutMs){var ctrl=new AbortController();var timer=setTimeout(function(){ctrl.abort();},timeoutMs||8000);options=options||{};options.signal=ctrl.signal;return fetch(url,options).then(function(res){if(!res.ok)throw new Error("HTTP "+res.status);return res.json();}).finally(function(){clearTimeout(timer);});}
+async function chooseModel(base){var saved=storedModel();if(saved)return saved;var data=await fetchJson(base+"/api/tags",{method:"GET"},2500);var names=((data&&data.models)||[]).map(function(m){return m&&m.name;}).filter(Boolean);if(!names.length)throw new Error("설치된 Ollama 모델이 없어요");var picked=names.find(function(name){var lower=String(name).toLowerCase();return PREFERRED.some(function(prefix){return lower.indexOf(prefix)===0;});});return picked||names[0];}
+async function localAi(prompt){var last;for(var i=0;i<BASES.length;i++){var base=BASES[i];try{var model=await chooseModel(base);var data=await fetchJson(base+"/api/generate",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({model:model,prompt:String(prompt||""),stream:false,options:{temperature:.4}})},60000);var text=String((data&&(data.response||(data.message&&data.message.content)))||"").trim();if(text)return text;throw new Error("빈 응답");}catch(e){last=e;}}throw last||new Error(HELP);}
+function onlineAi(prompt){return new Promise(function(resolve,reject){if(!parent||parent===window)return reject(new Error(HELP));var id=Math.random().toString(36).slice(2);listeners[id]={resolve:resolve,reject:reject};try{parent.postMessage({__mallo:"ai",id:id,prompt:String(prompt==null?"":prompt)},"*");}catch(e){delete listeners[id];reject(e);return;}setTimeout(function(){if(listeners[id]){delete listeners[id];reject(new Error("AI 응답 시간 초과"));}},60000);});}
+ko.aiLocal=en.aiLocal=localAi;
+ko.ai=en.ai=async function(prompt){try{return await localAi(prompt);}catch(localError){try{return await onlineAi(prompt);}catch(e){throw new Error(HELP);}}};
+}`;
+
 const page = (tool) => {
   const toolId = JSON.stringify(tool.id || '').replace(/</g, '\\u003c');
   const title = JSON.stringify(tool.title || '내 도구').replace(/</g, '\\u003c');
@@ -85,8 +102,7 @@ function withShim(html, seed){
     + 'function patch(){var rs=localStorage.setItem.bind(localStorage),rg=localStorage.getItem.bind(localStorage),rr=localStorage.removeItem.bind(localStorage);localStorage.setItem=function(k,v){memory[String(k)]=String(v);post();try{return rs(k,v)}catch(e){}};localStorage.getItem=function(k){k=String(k);if(Object.prototype.hasOwnProperty.call(memory,k))return memory[k];try{return rg(k)}catch(e){return null}};localStorage.removeItem=function(k){delete memory[String(k)];post();try{return rr(k)}catch(e){}};}'
     + 'try{Object.assign(memory,SEED||{});}catch(e){}'
     + 'try{patch();}catch(e){}'
-    + 'window["\uB9D0\uB85C"]=window["\uB9D0\uB85C"]||{};window.mallo=window.mallo||window["\uB9D0\uB85C"];'
-    + 'window["\uB9D0\uB85C"].ai=window.mallo.ai=function(p){return new Promise(function(resolve,reject){var id=Math.random().toString(36).slice(2);listeners[id]={resolve:resolve,reject:reject};try{parent.postMessage({__mallo:"ai",id:id,prompt:String(p==null?"":p)},"*");}catch(e){reject(e);}setTimeout(function(){if(listeners[id]){delete listeners[id];reject(new Error("AI \uC751\uB2F5 \uC2DC\uAC04 \uCD08\uACFC"));}},60000);});};'
+    + VIEWER_AI_BRIDGE
     + 'window.addEventListener("message",function(e){var d=e.data;if(!d)return;if((d.__mallo==="ai_result"||d.__mallo==="ai-result")&&listeners[d.id]){var l=listeners[d.id];delete listeners[d.id];d.error?l.reject(new Error(d.error)):l.resolve(d.text||"");}});'
     + '})();</scr'+'ipt>';
   if(/<head[^>]*>/i.test(html)) return html.replace(/<head[^>]*>/i, m => m + shim);
