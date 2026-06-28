@@ -706,7 +706,7 @@ const { createClient } = supabase;
 const S = {
   session:null, supabase:null, me:null, cfg:null, busy:false, loggedTracked:false,
   code:'', codeHistory:false, currentToolId:null, toolData:{}, viewerId:null, viewerOwner:false,
-  payBusy:false, fbRating:0
+  payBusy:false, fbRating:0, runtimeError:null, runtimeCheck:null
 };
 const WORKING_STEPS = ['요청을 이해하는 중', '화면을 설계하는 중', '기능을 만드는 중', '마무리 점검 중'];
 function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2600); }
@@ -761,6 +761,13 @@ function withShim(html, seed){
     localStorage.getItem=function(k){ if(Object.prototype.hasOwnProperty.call(memory,k)) return memory[k]; try{return rawGet(k)}catch(e){return null} };
     localStorage.removeItem=function(k){ delete memory[k]; post(); try{return rawRemove(k)}catch(e){} };
   }
+  function reportRuntime(kind,message,source,lineno,colno,stack){
+    const msg=String(message||'').trim();
+    if(!msg || /ResizeObserver loop/i.test(msg)) return;
+    try{ parent.postMessage({__mallo:'runtime_error',kind:kind||'error',message:msg.slice(0,600),source:String(source||'').slice(0,200),lineno:lineno||0,colno:colno||0,stack:String(stack||'').slice(0,1500)},'*'); }catch(e){}
+  }
+  window.addEventListener('error',function(e){ reportRuntime('error',e.message,e.filename,e.lineno,e.colno,e.error&&e.error.stack); });
+  window.addEventListener('unhandledrejection',function(e){ const r=e.reason; reportRuntime('unhandledrejection',(r&&(r.message||r))||'Unhandled promise rejection','',0,0,r&&r.stack); });
   try{ Object.assign(memory, SEED||{}); patch(); }catch(e){}
 ${PREVIEW_AI_BRIDGE}
   window.addEventListener('message',e=>{ const d=e.data; if(d&&d.__mallo==='ai_result'&&listeners[d.id]){ const l=listeners[d.id]; delete listeners[d.id]; d.error?l.reject(new Error(d.error)):l.resolve(d.text||''); } });
@@ -784,6 +791,58 @@ function renderPreview(html, force=false){
   $('empty').classList.add('hidden');
   $('frame').srcdoc = withShim(html, S.toolData || {});
 }
+function normalizeRuntimeError(d){
+  return {
+    kind:String(d.kind || 'runtime_error').slice(0,60),
+    message:String(d.message || '미리보기 실행 오류').slice(0,600),
+    source:String(d.source || '').slice(0,200),
+    lineno:Number(d.lineno || 0),
+    colno:Number(d.colno || 0),
+    stack:String(d.stack || '').slice(0,1500)
+  };
+}
+function finishRuntimeCheck(error){
+  const check = S.runtimeCheck;
+  if(!check || check.done) return;
+  check.done = true;
+  clearTimeout(check.timer);
+  S.runtimeCheck = null;
+  check.resolve(error || null);
+}
+function waitForRuntimeCheck(timeout=1800){
+  if(S.runtimeCheck) finishRuntimeCheck(null);
+  S.runtimeError = null;
+  return new Promise(resolve=>{
+    S.runtimeCheck = {
+      done:false,
+      resolve,
+      timer:setTimeout(()=>finishRuntimeCheck(S.runtimeError), timeout)
+    };
+  });
+}
+function handleRuntimeError(d){
+  const err = normalizeRuntimeError(d || {});
+  S.runtimeError = err;
+  if(S.runtimeCheck) finishRuntimeCheck(err);
+}
+function clipText(v, max){ v = String(v || ''); return v.length > max ? v.slice(0, max) + '\n...(생략)' : v; }
+function buildRuntimeRepairPrompt(originalPrompt, err){
+  return clipText(`[자동 오류 수정]
+방금 만든 단일 HTML 앱이 미리보기에서 실행 오류를 냈습니다.
+
+원래 요청:
+${clipText(originalPrompt, 1200)}
+
+실행 오류:
+${err.kind}: ${err.message}
+위치: ${err.source || 'inline'}:${err.lineno || 0}:${err.colno || 0}
+${err.stack ? `스택:\n${clipText(err.stack, 1200)}` : ''}
+
+요구사항:
+- 기존 디자인과 기능 의도는 유지하세요.
+- 오류의 직접 원인을 고쳐 실제로 실행되는 단일 HTML 전체를 \`\`\`html 코드블록 하나로 다시 출력하세요.
+- 새 데모 기능이나 가짜 버튼을 추가하지 마세요.`, 3900);
+}
 
 /* ================== 내 도구함 (저장·복원) ================== */
 // 미리보기에서 사용자가 입력한 데이터를 받아 자동 저장
@@ -794,6 +853,7 @@ window.addEventListener('message', (e)=>{
   ].filter(Boolean);
   if(!allowedSources.includes(e.source)) return;
   const d = e.data;
+  if(d && d.__mallo === 'runtime_error'){ handleRuntimeError(d); return; }
   if(d && d.__mallo === 'ai'){ handleAiRequest(e.source, d.id, d.prompt); return; }
   if(!(d && d.__mallo === 'data' && d.data)) return;
   S.toolData = d.data;
@@ -1164,13 +1224,81 @@ function extractHtml(text){
   return body.trim();
 }
 
+function generationGateMessage(code, fallback, editing){
+  if(code === 'login_required'){
+    return editing
+      ? '수정하려면 로그인이 필요해요. 방금 만든 앱이 실행 오류를 낸 경우에는 로그인 후 이어서 복구할 수 있어요.'
+      : '비로그인 무료 1회를 다 쓰셨어요. 로그인하면 2번 더 무료로 만들 수 있어요.';
+  }
+  if(code === 'no_credit' || code === 'trial_over' || code === 'limit'){
+    return editing
+      ? '수정하려면 AI 크레딧이 필요해요. 앱 코드 오류 자동 복구는 추가 차감 없이 진행돼요.'
+      : 'AI 크레딧이 필요해요. 충전하면 바로 이어서 만들 수 있어요.';
+  }
+  return fallback || '문제가 생겼어요. 다시 시도해 주세요.';
+}
+function openGenerationGate(code){
+  if(code === 'login_required') openLogin();
+  else if(code === 'no_credit' || code === 'trial_over' || code === 'limit'){
+    track('trial_over', { reason: code });
+    openCharge();
+  }
+}
+async function requestGeneratedHtml(prompt, currentCode, repair, loggedIn){
+  const headers = { 'content-type':'application/json' };
+  if(loggedIn) headers.authorization = `Bearer ${S.session.access_token}`;
+  else headers['x-mallo-device'] = deviceId();
+  const res = await fetch('/api/generate', {
+    method:'POST',
+    headers,
+    body: JSON.stringify({ prompt, code:currentCode || undefined, repair:!!repair, lang:(localStorage.getItem('mallo_lang')||'ko') })
+  });
+
+  if(!res.ok){
+    let body = {};
+    try{ body = await res.json(); }catch(e){}
+    const err = new Error(generationGateMessage(body.code, body.error, !!S.codeHistory));
+    err.code = body.code || (res.status === 401 ? 'login_required' : res.status === 402 ? 'no_credit' : '');
+    throw err;
+  }
+
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let acc = '';
+  let buf = '';
+  while(true){
+    const {done, value} = await reader.read();
+    if(done) break;
+    buf += dec.decode(value, {stream:true});
+    const lines = buf.split('\n');
+    buf = lines.pop();
+    for(const line of lines){
+      if(!line.startsWith('data:')) continue;
+      const data = line.slice(5).trim();
+      if(!data || data === '[DONE]') continue;
+      try{
+        const j = JSON.parse(data);
+        if(j.error) throw new Error(j.error);
+        if(j.t){ acc += j.t; renderPreview(extractHtml(acc)); }
+      }catch(e){ if(e.message && !e.message.includes('JSON')) throw e; }
+    }
+  }
+  const html = extractHtml(acc);
+  if(!html) throw new Error('결과를 만들지 못했어요. 조금 더 구체적으로 말씀해 주시겠어요?');
+  return html;
+}
+
 async function generate(req, meta={}){
   if(S.busy) return;
   const loggedIn = !!S.session;
   // 비로그인 무료 1회 소진 → 로그인 유도(서버도 이중 검증)
   if(!loggedIn && S.anonRemaining != null && S.anonRemaining <= 0){
+    $('welcome').classList.add('hidden');
+    $('chips').classList.add('hidden');
+    addMsg('user', meta.display || req);
+    addMsg('bot', generationGateMessage('login_required', '', !!S.codeHistory), 'err');
     openLogin();
-    toast('비로그인 무료 1회를 다 쓰셨어요. 로그인하면 2번 더 무료예요 ✨');
+    toast('수정하려면 로그인이 필요해요.');
     return;
   }
   S.busy = true;
@@ -1192,58 +1320,37 @@ async function generate(req, meta={}){
   $('liveDot').classList.add('on');
   $('previewTitle').textContent = '실시간으로 만들어지는 중...';
 
-  let acc = '';
   try{
-    const headers = { 'content-type':'application/json' };
-    if(loggedIn) headers.authorization = `Bearer ${S.session.access_token}`;
-    else headers['x-mallo-device'] = deviceId();
-    const res = await fetch('/api/generate', {
-      method:'POST',
-      headers,
-      body: JSON.stringify({ prompt:req, code:S.code || undefined, lang:(localStorage.getItem('mallo_lang')||'ko') })
-    });
-
-    if(!res.ok){
-      let err = {};
-      try{ err = await res.json(); }catch(e){}
-      if(err.code === 'login_required'){
-        openLogin();   // 비로그인 무료 소진 → 로그인 유도
-      } else if(err.code === 'no_credit' || err.code === 'trial_over' || err.code === 'limit'){
-        track('trial_over', { reason: err.code });
-        openFeedback(true);   // 로그인 무료 2회 소진 → 결제유도창
+    let prompt = req;
+    let currentCode = S.code || '';
+    let html = '';
+    let repaired = false;
+    for(let attempt=0; attempt<2; attempt++){
+      if(attempt > 0){
+        repaired = true;
+        botMsg.textContent = '앱 코드 오류를 감지해서 자동으로 고치는 중이에요. 복구는 크레딧을 추가 차감하지 않아요.';
       }
-      throw new Error(err.error || '문제가 생겼어요. 다시 시도해 주세요.');
-    }
-
-    // 통일된 SSE 수신: data: {"t":"..."} / data: [DONE]
-    const reader = res.body.getReader();
-    const dec = new TextDecoder();
-    let buf = '';
-    while(true){
-      const {done, value} = await reader.read();
-      if(done) break;
-      buf += dec.decode(value, {stream:true});
-      const lines = buf.split('\n');
-      buf = lines.pop();
-      for(const line of lines){
-        if(!line.startsWith('data:')) continue;
-        const data = line.slice(5).trim();
-        if(!data || data === '[DONE]') continue;
-        try{
-          const j = JSON.parse(data);
-          if(j.error) throw new Error(j.error);
-          if(j.t){ acc += j.t; renderPreview(extractHtml(acc)); }
-        }catch(e){ if(e.message && !e.message.includes('JSON')) throw e; }
+      html = await requestGeneratedHtml(prompt, currentCode, attempt > 0, loggedIn);
+      const runtimeCheck = waitForRuntimeCheck();
+      renderPreview(html, true);
+      const runtimeErr = await runtimeCheck;
+      if(runtimeErr && attempt === 0){
+        prompt = buildRuntimeRepairPrompt(req, runtimeErr);
+        currentCode = html;
+        track('runtime_repair', { kind: runtimeErr.kind });
+        continue;
       }
+      if(runtimeErr){
+        throw new Error('앱 코드 오류가 남아 있어요. 오류 내용을 바탕으로 다시 고쳐 주세요: ' + runtimeErr.message);
+      }
+      break;
     }
-
-    const html = extractHtml(acc);
-    if(!html) throw new Error('결과를 만들지 못했어요. 조금 더 구체적으로 말씀해 주시겠어요?');
     S.code = html;
-    renderPreview(html, true);
     clearInterval(stepTimer);
     botMsg.classList.remove('working');
-    botMsg.textContent = S.codeHistory
+    botMsg.textContent = repaired
+      ? '오류까지 고쳐서 완성했어요! 오른쪽에서 바로 써보세요. 자동 복구는 추가 차감 없이 처리했어요.'
+      : S.codeHistory
       ? '고쳤어요! 오른쪽에서 확인해 보세요. 더 바꾸고 싶으면 아래 버튼이나 말로 알려주세요 😊'
       : '완성했어요! 바로 써보세요. 입력한 내용은 자동 저장돼요. 아래 버튼이나 말로 고칠 수 있어요 😊';
     track('generate', { edited: S.codeHistory });
@@ -1260,6 +1367,7 @@ async function generate(req, meta={}){
     clearInterval(stepTimer);
     botMsg.classList.remove('working');
     botMsg.classList.add('err');
+    if(err.code) openGenerationGate(err.code);
     botMsg.textContent = err.message || '알 수 없는 오류가 났어요. 다시 시도해 주세요.';
   }finally{
     $('previewTitle').textContent = '실시간 미리보기';

@@ -41,6 +41,13 @@ const LOCAL_AI_PREVIEW_SHIM_SOURCE =
   "    localStorage.getItem=function(k){ if(Object.prototype.hasOwnProperty.call(memory,k)) return memory[k]; try{return rawGet(k)}catch(e){return null} };\n" +
   "    localStorage.removeItem=function(k){ delete memory[k]; post(); try{return rawRemove(k)}catch(e){} };\n" +
   "  }\n" +
+  "  function reportRuntime(kind,message,source,lineno,colno,stack){\n" +
+  "    const msg=String(message||'').trim();\n" +
+  "    if(!msg || /ResizeObserver loop/i.test(msg)) return;\n" +
+  "    try{ parent.postMessage({__mallo:'runtime_error',kind:kind||'error',message:msg.slice(0,600),source:String(source||'').slice(0,200),lineno:lineno||0,colno:colno||0,stack:String(stack||'').slice(0,1500)},'*'); }catch(e){}\n" +
+  "  }\n" +
+  "  window.addEventListener('error',function(e){ reportRuntime('error',e.message,e.filename,e.lineno,e.colno,e.error&&e.error.stack); });\n" +
+  "  window.addEventListener('unhandledrejection',function(e){ const r=e.reason; reportRuntime('unhandledrejection',(r&&(r.message||r))||'Unhandled promise rejection','',0,0,r&&r.stack); });\n" +
   "  try{ Object.assign(memory, SEED||{}); patch(); }catch(e){}\n" +
   "${PREVIEW_AI_BRIDGE}\n" +
   "  window.addEventListener('message',e=>{ const d=e.data; if(d&&d.__mallo==='ai_result'&&listeners[d.id]){ const l=listeners[d.id]; delete listeners[d.id]; d.error?l.reject(new Error(d.error)):l.resolve(d.text||''); } });\n" +
@@ -90,6 +97,7 @@ replaceOnce(
   ].filter(Boolean);
   if(!allowedSources.includes(e.source)) return;
   const d = e.data;
+  if(d && d.__mallo === 'runtime_error'){ handleRuntimeError(d); return; }
   if(d && d.__mallo === 'ai'){ handleAiRequest(e.source, d.id, d.prompt); return; }
   if(!(d && d.__mallo === 'data' && d.data)) return;
 `,

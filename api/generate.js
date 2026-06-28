@@ -43,6 +43,16 @@ const SYSTEM_PROMPT = `당신은 한국어 요구사항을 받아 "실무에서 
 
 28. 키가 필요하거나 브라우저 CORS 정책으로 막히는 외부 API(예: 유튜브 데이터 API, 외부 검색·데이터 API 등)는 window.말로.fetch(url, options)로 호출한다. 이는 말로 서버를 경유하는 프록시라 API 키를 노출하지 않고 안전하게 호출된다. 사용법: const r = await window.말로.fetch(API_URL); 이후 r.data(JSON이면 파싱된 객체) 또는 r.raw(원문 문자열)와 r.status를 사용한다. 단, 이 기능은 말로 온라인 앱에서만 동작하며 내려받은 단독 실행 파일에서는 동작하지 않는다. 따라서 반드시 if(window.말로 && window.말로.fetch){ ... } 로 사용 가능 여부를 먼저 확인하고, 사용할 수 없으면 사용자에게 '이 기능은 말로 온라인에서만 동작해요' 같은 친절한 대체 안내를 보여준다. 허용된 외부 호스트로만 요청이 나간다.`;
 
+const MEDIA_GUARDRAILS = `
+
+[영상/오디오/브라우저 한계 기능 가드레일]
+- 사용자가 영상 편집기, 오디오 편집기, 녹화, 인코딩, 파일 변환, 서버 저장, 결제, 로그인, 예약 접수처럼 브라우저 단독 HTML만으로 완전 구현하기 어려운 기능을 요청해도 거절하지 말고, 브라우저에서 실제로 작동하는 범위로 축소한 완성형 도구를 만든다.
+- 영상/오디오 편집 요청에서는 파일 업로드, 미리보기, 재생/일시정지, 구간 시작/끝 표시, 현재 시간 표시, 장면 메모, 컷 리스트, 편집 계획 저장, CSV/JSON 내보내기처럼 실제 브라우저에서 가능한 기능만 버튼으로 제공한다.
+- 실제 인코딩/렌더링/MP4 내보내기를 구현하지 못한다면 "내보내기", "렌더링", "변환" 버튼을 작동하는 것처럼 만들지 않는다. 대신 서버 또는 데스크톱 앱이 필요한 작업이라는 안내 영역을 두고, 사용자가 복사하거나 다운로드할 수 있는 편집 지시서/컷 리스트를 제공한다.
+- 모든 버튼은 클릭 시 실제 상태 변화, 파일 다운로드, 복사, 토스트, 모달, 재생 제어 중 하나를 수행해야 한다. 아무 일도 하지 않는 데모 버튼, "준비 중", "데모"만 표시하는 버튼은 만들지 않는다.
+- 업로드 전 비활성화된 버튼은 왜 비활성인지 명확히 표시하고, 파일을 올리면 가능한 컨트롤은 실제로 활성화한다.
+`;
+
 const APP_SPEC_SYSTEM = `당신은 말로(Mallo)의 숨겨진 의도 분석/AppSpec 엔진입니다.
 사용자가 짧고 모호하게 입력한 요청을, 생성 모델이 한 번에 의도에 가까운 완성형 소프트웨어를 만들 수 있는 구조화된 AppSpec(JSON)으로 바꿉니다.
 
@@ -176,7 +186,7 @@ ${prompt}`;
         model: modelName,
         max_tokens: 2200,
         temperature: 0.2,
-        system: APP_SPEC_SYSTEM,
+        system: APP_SPEC_SYSTEM + MEDIA_GUARDRAILS,
         messages: [{ role: 'user', content: userText }],
       }),
     });
@@ -196,7 +206,7 @@ ${prompt}`;
         temperature: 0.2,
         max_tokens: 2200,
         messages: [
-          { role: 'system', content: APP_SPEC_SYSTEM },
+          { role: 'system', content: APP_SPEC_SYSTEM + MEDIA_GUARDRAILS },
           { role: 'user', content: userText },
         ],
       }),
@@ -213,7 +223,7 @@ ${prompt}`;
       headers: { 'content-type': 'application/json' },
       signal,
       body: JSON.stringify({
-        systemInstruction: { parts: [{ text: APP_SPEC_SYSTEM }] },
+        systemInstruction: { parts: [{ text: APP_SPEC_SYSTEM + MEDIA_GUARDRAILS }] },
         contents: [{ role: 'user', parts: [{ text: userText }] }],
         generationConfig: { temperature: 0.2, maxOutputTokens: 2200 },
       }),
@@ -332,12 +342,19 @@ export default async function handler(req) {
   if (!prompt || typeof prompt !== 'string' || prompt.length > 4000) {
     return json({ error: '요청 내용을 확인해 주세요 (최대 4000자)' }, 400);
   }
+  const freeRepair = body?.repair === true
+    && typeof code === 'string'
+    && code.trim().length > 0
+    && prompt.trim().startsWith('[자동 오류 수정]');
 
   // 3. 사용권 검사 + 차감 (DB에서 원자적으로)
   //  - 로그인: 계정 무료 체험(TRIAL_LIMIT=2회) → 만료 없는 이용권 순으로 차감
   //  - 비로그인: 기기(device)당 무료 ANON_FREE_LIMIT(기본 1회). 소진 시 로그인 유도(login_required).
   let quota, restore;
-  if (user) {
+  if (freeRepair) {
+    quota = { allowed: true, source: 'repair', remaining: '' };
+    restore = async () => {};
+  } else if (user) {
     const rpc = await sb('rpc/use_generation', {
       method: 'POST',
       body: JSON.stringify({
@@ -381,7 +398,8 @@ export default async function handler(req) {
   //    별도 API 호출을 추가하지 않고, 사용자 원문을 SW 설계도(JSON)로 정리한 뒤 생성 모델에 전달.
   const appSpec = await buildAppSpec(prompt, !!code);
   const userPrompt = buildUserPrompt(prompt, code, appSpec);
-  const sysPrompt = (lang === 'en') ? SYSTEM_PROMPT + ' [OUTPUT LANGUAGE: ENGLISH — TOP PRIORITY] The user is an English speaker. Generate the ENTIRE tool in natural fluent English: every UI label, heading, button, placeholder, message, empty state, and ALL sample data must be in English. Use $ (USD) as the default currency and MM/DD/YYYY date format. Never output Korean. This overrides any earlier instruction about writing in Korean.' : SYSTEM_PROMPT;
+  const baseSystemPrompt = SYSTEM_PROMPT + MEDIA_GUARDRAILS;
+  const sysPrompt = (lang === 'en') ? baseSystemPrompt + ' [OUTPUT LANGUAGE: ENGLISH — TOP PRIORITY] The user is an English speaker. Generate the ENTIRE tool in natural fluent English: every UI label, heading, button, placeholder, message, empty state, and ALL sample data must be in English. Use $ (USD) as the default currency and MM/DD/YYYY date format. Never output Korean. This overrides any earlier instruction about writing in Korean.' : baseSystemPrompt;
 
   // 5. LLM 호출 (서버 환경변수의 키 사용 — 클라이언트는 모름)
   // 공급자별 요청 빌더 — 1차(유료·고품질)와 폴백(무료) 양쪽에 재사용
@@ -510,6 +528,7 @@ export default async function handler(req) {
       'content-type': 'text/event-stream; charset=utf-8',
       'cache-control': 'no-cache',
       'x-remaining': String(quota.remaining ?? ''),
+      'x-repair-free': freeRepair ? '1' : '0',
       // x-model 헤더 제거: 사용 모델/공급자 노출 방지(영업기밀)
     },
   });
