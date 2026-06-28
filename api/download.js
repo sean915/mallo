@@ -182,7 +182,7 @@ const DOWNLOAD_AI_NOTICE = `<script>
   window.__malloAiBridgeInstalled = true;
   var ko = window["말로"] = window["말로"] || {};
   var en = window.mallo = window.mallo || ko;
-  var HELP = "이 다운로드 앱에서는 온라인 AI 기능을 사용할 수 없어요. 말로 온라인에서 로그인 후 크레딧으로 사용해 주세요.";
+  var HELP = "이 다운로드 앱에서는 온라인 AI 기능을 사용할 수 없어요. 말로 온라인에서 로그인 후 잔액으로 사용해 주세요.";
   ko.ai = en.ai = function(){ return Promise.reject(new Error(HELP)); };
   ko.aiSetup = en.aiSetup = function(){ throw new Error(HELP); };
 })();

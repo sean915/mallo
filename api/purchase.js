@@ -1,9 +1,9 @@
-// POST /api/purchase — AI 크레딧 단건결제 검증 후 잔여 건수 충전
+// POST /api/purchase — 말로 잔액 단건결제 검증 후 충전
 //
 // 흐름:
 //   1) 프론트에서 PortOne 단건결제(requestPayment, 카카오페이) 성공 → paymentId 수신
 //   2) 여기서 PortOne API로 실제 결제 상태·금액·구매자·상품 정보를 검증
-//   3) add_credits()로 잔여 크레딧 충전(같은 paymentId면 중복 충전 안 됨 = 멱등)
+//   3) add_credits()로 잔액 충전(같은 paymentId면 중복 충전 안 됨 = 멱등)
 //
 // 필요한 서버 환경변수: PORTONE_API_SECRET
 import { json, env, getUser, sb, PACKS } from './_lib.js';
@@ -80,12 +80,14 @@ export default async function handler(req) {
   if (custom) {
     if (custom.packId && custom.packId !== packId) return json({ error: '결제 상품 정보가 일치하지 않아요.' }, 400);
     if (custom.userId && custom.userId !== user.id) return json({ error: '결제자 정보가 일치하지 않아요.' }, 403);
-    if (custom.credits && Number(custom.credits) !== pack.credits) return json({ error: '크레딧 수량이 일치하지 않아요.' }, 400);
+    if (custom.balance && Number(custom.balance) !== pack.credits) return json({ error: '충전 금액이 일치하지 않아요.' }, 400);
+    if (custom.credits && Number(custom.credits) !== pack.credits) return json({ error: '충전 금액이 일치하지 않아요.' }, 400);
   }
 
   const orderName = readOrderName(pay);
-  if (orderName && !orderName.includes(String(pack.credits))) {
-    console.error('[purchase] orderName mismatch', { paymentId, orderName, credits: pack.credits });
+  const normalizedOrderName = orderName.replace(/,/g, '');
+  if (orderName && !normalizedOrderName.includes(String(pack.price)) && !orderName.includes(pack.name)) {
+    console.error('[purchase] orderName mismatch', { paymentId, orderName, pack: pack.name, price: pack.price });
     return json({ error: '주문 정보가 일치하지 않아요.' }, 400);
   }
 
@@ -113,5 +115,5 @@ export default async function handler(req) {
     return json({ error: '충전 처리에 실패했어요. 결제는 정상이니 고객센터로 문의해 주세요.' }, 500);
   }
   const result = await add.json().catch(() => ({}));
-  return json({ ok: true, paymentId, packId, credits_added: pack.credits, ...result });
+  return json({ ok: true, paymentId, packId, balance_added: pack.credits, credits_added: pack.credits, ...result });
 }

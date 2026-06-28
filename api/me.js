@@ -1,5 +1,5 @@
 // GET /api/me — 내 체험/구독/사용량 상태
-import { json, env, getUser } from './_lib.js';
+import { json, env, getUser, GENERATION_PRICE, AI_FEATURE_PRICE } from './_lib.js';
 
 export const config = { runtime: 'edge' };
 
@@ -32,15 +32,21 @@ export default async function handler(req) {
     const trialLimit = Number(env('TRIAL_LIMIT', String(TRIAL_LIMIT)));
     const used = Number(p.usage_count || 0);          // 무료 체험 사용 횟수
     const trialLeft = Math.max(0, trialLimit - used); // 남은 무료 체험 횟수
-    const credits = Number(p.credits || 0);           // 충전한 AI 크레딧 잔여 건수
-    const remaining = trialLeft + credits;            // 총 사용 가능 횟수
+    const balance = Number(p.credits || 0);           // 충전한 말로 잔액(원)
+    const generationUses = trialLeft + Math.floor(balance / GENERATION_PRICE);
+    const aiUses = Math.floor(balance / AI_FEATURE_PRICE);
 
     return json({
       email: user.email,
       unlimited: isMaster || !!p.unlimited,
       trialLeft,
-      credits,
-      remaining,
+      credits: balance,
+      balance,
+      remaining: generationUses,
+      generationUses,
+      aiUses,
+      generationPrice: GENERATION_PRICE,
+      aiFeaturePrice: AI_FEATURE_PRICE,
       used,
     });
   } catch (e) {

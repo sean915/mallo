@@ -9,7 +9,7 @@ const LOCAL_AI_PREVIEW_BRIDGE_SOURCE = "const PREVIEW_AI_BRIDGE = `" + String.ra
     const ko = window.말로 = window.말로 || {};
     const en = window.mallo = window.mallo || ko;
     let aiSeq = 0;
-    const HELP = 'AI 기능은 말로 온라인에서 로그인 후 크레딧으로 사용할 수 있어요.';
+    const HELP = 'AI 기능은 말로 온라인에서 로그인 후 잔액으로 사용할 수 있어요.';
     ko.ai = en.ai = function(prompt){
       return new Promise((resolve, reject)=>{
         const id = 'ai_' + Date.now() + '_' + (++aiSeq);
@@ -111,7 +111,7 @@ replaceOnce(
 `,
 `async function handleAiRequest(source, id, prompt){
   try{
-    if(!S.session) throw new Error('AI 기능은 로그인 후 크레딧으로 사용할 수 있어요.');
+    if(!S.session) throw new Error('AI 기능은 로그인 후 잔액으로 사용할 수 있어요.');
     const res = await fetch('/api/ai', {
       method:'POST',
       headers:{ 'content-type':'application/json', authorization:\`Bearer \${S.session.access_token}\` },
@@ -287,7 +287,7 @@ replaceOnce(
     <button class="bigbtn" id="btnFbSend">의견 보내기</button>`,
 `    <div class="planbox hidden" id="planBox"></div>
     <div class="pay-note hidden" id="payNote">
-      서비스 제공일: 결제 완료 즉시 AI 크레딧 충전 · 도구 생성/수정 또는 도구 안의 AI 기능 사용 시 1건 차감 · 환불: 결제 후 7일 이내 미사용분 환불, 사용분 제외 · <a href="/refund.html" target="_blank">환불 정책 보기</a>
+      서비스 제공일: 결제 완료 즉시 말로 잔액 충전 · 도구 만들기/수정 3,900원, 도구 안 AI 기능 990원 차감 · 환불: 결제 후 7일 이내 미사용 잔액 환불, 사용분 제외 · <a href="/refund.html" target="_blank">환불 정책 보기</a>
     </div>
     <button class="bigbtn" id="btnFbSend">의견 보내기</button>`,
   'payment detail note'
@@ -307,7 +307,8 @@ replaceOnce(
 
 replaceOnce(
 `    b.innerHTML = '<div><div class="pn">'+p.name+badge+'</div><div class="pd">'+p.credits+'건 생성권 · 건당 '+per.toLocaleString()+'원 · 만료 없음</div></div><div class="pv">'+p.price.toLocaleString()+'원</div>';`,
-`    b.innerHTML = '<div><div class="pn">'+p.name+badge+'</div><div class="pd">'+p.credits+'건 크레딧 · 도구 생성/AI 기능에 사용 · 만료 없음</div></div><div class="pv">'+p.price.toLocaleString()+'원<br><span style="font-size:11px;color:#6b7684">결제하기</span></div>';`,
+`    const makeUses = Number(p.makeUses || Math.max(1, Math.floor(Number(p.credits || 0) / generationPrice())));
+    b.innerHTML = '<div><div class="pn">'+p.name+badge+'</div><div class="pd">말로 잔액 '+formatWon(p.credits)+' · 도구 만들기/수정 '+makeUses+'회 기준 · AI 기능은 1회 '+formatWon(aiFeaturePrice())+'</div></div><div class="pv">'+formatWon(p.price)+'<br><span style="font-size:11px;color:#6b7684">충전하기</span></div>';`,
   'payment product detail copy'
 );
 
@@ -327,7 +328,7 @@ replaceOnce(
 `      $('fbTitle').textContent = '무료 횟수를 다 쓰셨어요 🎉';
       $('fbSub').textContent = '생성권을 충전하면 계속 만들 수 있어요. 카카오페이로 한 번만 결제하면 끝, 구매한 생성권은 만료 없이 계속 쓸 수 있어요.';`,
 `      $('fbTitle').textContent = '무료 체험을 모두 사용했어요';
-      $('fbSub').textContent = '도구 생성과 AI 기능 사용에 필요한 크레딧을 선택해 주세요. 구매한 크레딧은 만료 없이 사용할 수 있습니다.';
+      $('fbSub').textContent = '도구를 계속 만들 수 있도록 말로 잔액을 충전해 주세요. 잔액은 만료 없이 사용할 수 있습니다.';
       $('fbStars').classList.add('hidden');
       $('fbText').classList.add('hidden');
       $('btnFbSend').classList.add('hidden');
@@ -375,8 +376,8 @@ $('btnFeedback').onclick = ()=> openFeedback(false);`,
 }
 function openCharge(){
   if(!payConfigured()){ toast('결제 준비 중이에요'); return; }
-  $('fbTitle').textContent = 'AI 크레딧 충전';
-  $('fbSub').textContent = '도구 생성, 수정, 도구 안의 AI 기능 사용에 필요한 크레딧 상품을 선택해 주세요.';
+  $('fbTitle').textContent = '말로 잔액 충전';
+  $('fbSub').textContent = '도구 만들기 횟수 기준으로 고르면 돼요. 도구 안 AI 기능은 사용할 때마다 990원씩 차감됩니다.';
   $('fbStars').classList.add('hidden');
   $('fbText').classList.add('hidden');
   $('btnFbSend').classList.add('hidden');

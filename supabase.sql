@@ -3,7 +3,7 @@
 -- Supabase 대시보드 → SQL Editor 에 붙여넣고 Run
 -- ============================================
 
--- 사용자 프로필 (무료 체험/이용권/사용량)
+-- 사용자 프로필 (무료 체험/말로 잔액/사용량)
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   email text,
@@ -13,11 +13,21 @@ create table if not exists public.profiles (
   usage_count int not null default 0
 );
 
-alter table public.profiles add column if not exists credits int not null default 0;              -- 만료 없는 잔여 AI 크레딧
+alter table public.profiles add column if not exists credits int not null default 0;              -- 만료 없는 말로 잔액(원). 기존 컬럼명은 호환을 위해 유지.
+alter table public.profiles add column if not exists balance_version int;                         -- 0/null: 옛 크레딧 건수, 1: 원 단위 잔액
 alter table public.profiles add column if not exists unlimited boolean not null default false;    -- 운영자/마스터 계정
 alter table public.profiles add column if not exists last_generated_at timestamptz;              -- 쿨다운용
 alter table public.profiles add column if not exists daily_usage_date date not null default current_date;
 alter table public.profiles add column if not exists daily_usage_count int not null default 0;
+
+-- 기존 잔여 건수는 AI 기능 1회 가격(990원)을 기준으로 잔액으로 1회만 전환.
+update public.profiles
+  set credits = credits * 990,
+      balance_version = 1
+  where coalesce(balance_version, 0) = 0;
+alter table public.profiles alter column balance_version set default 1;
+update public.profiles set balance_version = 1 where balance_version is null;
+alter table public.profiles alter column balance_version set not null;
 
 alter table public.profiles enable row level security;
 
@@ -39,12 +49,12 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
 
--- AI 크레딧 구매 기록: payment_id 기준 멱등 처리. 환불 시 미사용분 계산 근거로 사용.
+-- 말로 잔액 구매 기록: payment_id 기준 멱등 처리. 환불 시 미사용분 계산 근거로 사용.
 create table if not exists public.credit_purchases (
   payment_id text primary key,
   user_id uuid not null references auth.users(id) on delete cascade,
   pack text not null,
-  credits int not null,
+  credits int not null, -- 충전 잔액(원). 기존 컬럼명은 호환을 위해 유지.
   amount int not null,
   refunded_credits int not null default 0,
   refunded_amount int not null default 0,
@@ -56,14 +66,14 @@ drop policy if exists "own credit purchases read" on public.credit_purchases;
 create policy "own credit purchases read" on public.credit_purchases
   for select using (auth.uid() = user_id);
 
--- 결제 성공 후 AI 크레딧 충전(멱등)
+-- 결제 성공 후 말로 잔액 충전(멱등)
 create or replace function public.add_credits(uid uuid, p_payment_id text, p_pack text, p_credits int, p_amount int)
 returns json language plpgsql security definer set search_path = public as $$
 declare
   inserted_count int := 0;
   balance int := 0;
 begin
-  insert into public.profiles (id) values (uid) on conflict (id) do nothing;
+  insert into public.profiles (id, balance_version) values (uid, 1) on conflict (id) do nothing;
 
   insert into public.credit_purchases (payment_id, user_id, pack, credits, amount)
   values (p_payment_id, uid, p_pack, p_credits, p_amount)
@@ -82,22 +92,25 @@ begin
   return json_build_object('added', inserted_count > 0, 'credits', coalesce(balance, 0));
 end $$;
 
--- 생성/AI 기능 1회 사용 처리: 무료 체험 후 만료 없는 크레딧을 1회씩 차감.
+-- 생성/AI 기능 사용 처리: 무료 체험 후 만료 없는 잔액에서 사용처별 금액을 차감.
 drop function if exists public.use_generation(uuid, int, int);
 drop function if exists public.use_generation(uuid, int, int, int, int);
+drop function if exists public.use_generation(uuid, int, int, int, int, int);
 create or replace function public.use_generation(
   uid uuid,
   monthly_limit int,
   trial_minutes int,
   p_cooldown_sec int default 0,
-  p_daily_cap int default 0
+  p_daily_cap int default 0,
+  p_cost int default 3900
 )
 returns json language plpgsql security definer set search_path = public as $$
 declare
   p public.profiles;
   now_ts timestamptz := now();
+  charge int := greatest(coalesce(p_cost, 3900), 1);
 begin
-  insert into public.profiles (id) values (uid) on conflict (id) do nothing;
+  insert into public.profiles (id, balance_version) values (uid, 1) on conflict (id) do nothing;
   select * into p from public.profiles where id = uid for update;
 
   if p.daily_usage_date is distinct from current_date then
@@ -121,7 +134,7 @@ begin
       daily_usage_count = daily_usage_count + 1,
       last_generated_at = now_ts
     where id = uid;
-    return json_build_object('allowed', true, 'remaining', 999999, 'source', 'unlimited');
+    return json_build_object('allowed', true, 'remaining', 999999, 'balance', 999999, 'source', 'unlimited', 'cost', 0);
   end if;
 
   -- 무료 체험: 평생 trial_minutes(=무료 생성 횟수)회
@@ -131,27 +144,30 @@ begin
       daily_usage_count = daily_usage_count + 1,
       last_generated_at = now_ts
     where id = uid;
-    return json_build_object('allowed', true, 'remaining', (trial_minutes - p.usage_count - 1) + p.credits, 'source', 'trial');
+    return json_build_object('allowed', true, 'remaining', p.credits, 'balance', p.credits, 'source', 'trial', 'cost', 0);
   end if;
 
-  -- 유료 이용권: 만료 없이 1회씩 차감
-  if p.credits > 0 then
+  -- 유료 잔액: 사용처별 금액 차감
+  if p.credits >= charge then
     update public.profiles set
-      credits = credits - 1,
+      credits = credits - charge,
       daily_usage_count = daily_usage_count + 1,
       last_generated_at = now_ts
     where id = uid;
-    return json_build_object('allowed', true, 'remaining', p.credits - 1, 'source', 'credit');
+    return json_build_object('allowed', true, 'remaining', p.credits - charge, 'balance', p.credits - charge, 'source', 'credit', 'cost', charge);
   end if;
 
-  return json_build_object('allowed', false, 'reason', 'no_credit');
+  return json_build_object('allowed', false, 'reason', 'no_credit', 'balance', p.credits, 'required', charge);
 end $$;
 
 -- 생성 실패 시 차감 복구. /api/generate가 업스트림 오류·스트림 실패·빈 응답을 감지하면 호출.
-create or replace function public.restore_generation(uid uuid, p_source text default null)
+drop function if exists public.restore_generation(uuid, text);
+drop function if exists public.restore_generation(uuid, text, int);
+create or replace function public.restore_generation(uid uuid, p_source text default null, p_cost int default 3900)
 returns json language plpgsql security definer set search_path = public as $$
 declare
   p public.profiles;
+  charge int := greatest(coalesce(p_cost, 3900), 1);
 begin
   select * into p from public.profiles where id = uid for update;
   if not found then
@@ -160,11 +176,11 @@ begin
 
   if p_source = 'credit' then
     update public.profiles set
-      credits = credits + 1,
+      credits = credits + charge,
       daily_usage_count = greatest(daily_usage_count - 1, 0),
       last_generated_at = null
     where id = uid;
-    return json_build_object('restored', true, 'source', 'credit');
+    return json_build_object('restored', true, 'source', 'credit', 'amount', charge);
   elsif p_source = 'trial' then
     update public.profiles set
       usage_count = greatest(usage_count - 1, 0),

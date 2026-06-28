@@ -15,7 +15,7 @@ if(!window.__malloAiBridgeInstalled){
   var ko=window["\\uB9D0\\uB85C"]=window["\\uB9D0\\uB85C"]||{};
   var en=window.mallo=window.mallo||ko;
   var seq=0;
-  var HELP="AI 기능은 말로 온라인에서 로그인 후 크레딧으로 사용할 수 있어요.";
+  var HELP="AI 기능은 말로 온라인에서 로그인 후 잔액으로 사용할 수 있어요.";
   ko.ai=en.ai=function(prompt){return new Promise(function(resolve,reject){var id="ai_"+Date.now()+"_"+(++seq);listeners[id]={resolve:resolve,reject:reject};try{parent.postMessage({__mallo:"ai",id:id,prompt:String(prompt||"")},"*");}catch(e){delete listeners[id];reject(new Error(HELP));return;}setTimeout(function(){if(!listeners[id])return;delete listeners[id];reject(new Error("AI 응답이 지연되고 있어요. 잠시 후 다시 시도해 주세요."));},90000);});};
   ko.aiSetup=en.aiSetup=function(){throw new Error(HELP);};
 }`;
@@ -122,7 +122,7 @@ async function initSession(){
 async function handleAiRequest(id, prompt){
   const reply = (payload)=>{ try{ frame.contentWindow && frame.contentWindow.postMessage(Object.assign({ __mallo:'ai-result', id }, payload), '*'); }catch(e){} };
   try{
-    if(!session) throw new Error('AI 기능은 말로에 로그인한 뒤 크레딧으로 사용할 수 있어요.');
+    if(!session) throw new Error('AI 기능은 말로에 로그인한 뒤 잔액으로 사용할 수 있어요.');
     const res = await fetch('/api/ai', {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: 'Bearer ' + session.access_token },

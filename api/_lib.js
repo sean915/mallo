@@ -1,12 +1,15 @@
 // 공용 유틸 (Vercel Edge Functions)
 
-// AI 크레딧 팩 (단일 출처) — 1회성 구매, 가격(원)/크레딧 수. 만료 없음.
-// 크레딧 1건은 프로그램 생성/수정 또는 생성된 도구의 AI 기능 1회에 사용된다. 기준가: 1건 990원.
+// 말로 잔액 정책 (단일 출처) — 1회성 충전, 만료 없음.
+// DB의 profiles.credits 컬럼은 기존 이름을 유지하지만, 값은 원 단위 잔액으로 사용한다.
+export const GENERATION_PRICE = 3900;
+export const AI_FEATURE_PRICE = 990;
+
 export const PACKS = {
-  single:   { name: 'AI 크레딧 1건', price: 990, credits: 1 },
-  light:    { name: 'AI 크레딧 5건 · 5% 할인', price: 4700, credits: 5 },
-  standard: { name: 'AI 크레딧 10건 · 10% 할인', price: 8900, credits: 10 },
-  pro:      { name: 'AI 크레딧 30건 · 15% 할인', price: 25200, credits: 30 },
+  single:   { name: '도구 만들기 1회', price: GENERATION_PRICE, credits: GENERATION_PRICE, makeUses: 1 },
+  light:    { name: '도구 만들기 3회', price: GENERATION_PRICE * 3, credits: GENERATION_PRICE * 3, makeUses: 3 },
+  standard: { name: '도구 만들기 5회', price: GENERATION_PRICE * 5, credits: GENERATION_PRICE * 5, makeUses: 5 },
+  pro:      { name: '도구 만들기 10회', price: GENERATION_PRICE * 10, credits: GENERATION_PRICE * 10, makeUses: 10 },
 };
 // 하위호환 별칭(구 구독 코드가 참조해도 빌드 깨지지 않도록)
 export const PLANS = PACKS;

@@ -1,4 +1,4 @@
-import { json, env, getUser, sb } from './_lib.js';
+import { json, env, getUser, sb, GENERATION_PRICE, AI_FEATURE_PRICE } from './_lib.js';
 
 export const config = { runtime: 'edge' };
 
@@ -28,8 +28,8 @@ const SYSTEM_PROMPT = `당신은 한국어 요구사항을 받아 "실무에서 
 [AI 기능 — 내장 AI 사용법]
 18. 요약·번역·문장 다듬기·분류·아이디어 생성 등 "AI/지능형" 기능이 필요하면, 외부 AI API 키를 코드에 절대 넣지 말 것(보안상 금지). 대신 실행 환경에 이미 주입된 전역 함수 \`window.말로.ai(프롬프트)\`(별칭 \`window.mallo.ai\`)를 사용할 것.
 19. 사용법: \`const 결과 = await window.말로.ai("다음 회의록을 3줄로 요약해줘:\\n" + 입력텍스트);\` — 프롬프트(문자열) 하나를 받아 AI가 만든 텍스트(문자열)를 Promise로 돌려줌. 반드시 await와 try/catch로 감싸고, 호출 동안 버튼 비활성화·"AI가 처리 중…" 로딩 표시를 넣을 것.
-20. 이 함수는 말로 서버의 AI 기능을 안전하게 호출하는 브리지다. 호출 성공 시 사용자의 크레딧 1건이 차감될 수 있다. 앱 코드에 API 키, 모델 키, 서버 비밀값을 절대 넣지 말 것.
-21. window.말로 가 없을 수도 있으니(\`if(window.말로&&window.말로.ai)\`) 방어적으로 호출하고, 없거나 실패하면 "AI 기능은 말로 온라인에서 로그인 후 크레딧으로 사용할 수 있어요"처럼 친절한 한국어 안내를 보여줄 것. AI 호출 결과는 그대로 화면에 예쁘게 표시.
+20. 이 함수는 말로 서버의 AI 기능을 안전하게 호출하는 브리지다. 호출 성공 시 사용자의 말로 잔액 ${AI_FEATURE_PRICE.toLocaleString('ko-KR')}원이 차감될 수 있다. 앱 코드에 API 키, 모델 키, 서버 비밀값을 절대 넣지 말 것.
+21. window.말로 가 없을 수도 있으니(\`if(window.말로&&window.말로.ai)\`) 방어적으로 호출하고, 없거나 실패하면 "AI 기능은 말로 온라인에서 로그인 후 잔액으로 사용할 수 있어요"처럼 친절한 한국어 안내를 보여줄 것. AI 호출 결과는 그대로 화면에 예쁘게 표시.
 
 [AppSpec 사용]
 22. 사용자 원문과 함께 제공되는 "내부 AppSpec"이 있으면, 그것을 제품 설계도처럼 읽고 의도·데이터 구조·화면·기능·검증·사용 흐름·샘플 데이터를 빠짐없이 구현할 것.
@@ -256,7 +256,7 @@ async function buildAppSpec(prompt, hasCode) {
   let provider = env('APP_SPEC_PROVIDER', '') || env('PROMPT_REWRITE_PROVIDER', '');
   let apiKey = explicitKey;
   if (!apiKey && primaryKey) {
-    provider = provider || env('LLM_PROVIDER', 'gemini');
+    provider = provider || env('LLM_PROVIDER', 'claude');
     apiKey = primaryKey;
   }
   if (!apiKey && fallbackKey) {
@@ -307,7 +307,7 @@ async function restoreGeneration(uid, quota) {
   try {
     const res = await sb('rpc/restore_generation', {
       method: 'POST',
-      body: JSON.stringify({ uid, p_source: source }),
+      body: JSON.stringify({ uid, p_source: source, p_cost: Number(quota?.cost || GENERATION_PRICE) }),
     });
     if (!res.ok) {
       const detail = await res.text().catch(() => '');
@@ -355,7 +355,7 @@ export default async function handler(req) {
     && prompt.trim().startsWith('[자동 오류 수정]');
 
   // 3. 사용권 검사 + 차감 (DB에서 원자적으로)
-  //  - 로그인: 계정 무료 체험(TRIAL_LIMIT=2회) → 만료 없는 이용권 순으로 차감
+  //  - 로그인: 계정 무료 체험(TRIAL_LIMIT=2회) → 만료 없는 말로 잔액 순으로 차감
   //  - 비로그인: 기기(device)당 무료 ANON_FREE_LIMIT(기본 1회). 소진 시 로그인 유도(login_required).
   let quota, restore;
   if (freeRepair) {
@@ -370,6 +370,7 @@ export default async function handler(req) {
         trial_minutes: Number(env('TRIAL_LIMIT', '2')), // 로그인 계정 무료 체험 '횟수'
         p_cooldown_sec: Number(env('COOLDOWN_SEC', '6')),   // 어뷰징: 계정당 연속 생성 최소 간격(초)
         p_daily_cap: Number(env('DAILY_CAP', '500')),        // 어뷰징/비용: 일일 생성 상한
+        p_cost: GENERATION_PRICE,
       }),
     });
     if (!rpc.ok) return json({ error: '서버 오류가 났어요. 잠시 후 다시 시도해 주세요.' }, 500);
@@ -390,8 +391,8 @@ export default async function handler(req) {
 
   if (!quota.allowed) {
     const MSG = {
-      no_credit: '무료 횟수를 모두 썼어요. 이용권을 충전하면 계속 만들 수 있어요 ⚡',
-      trial_over: '무료 횟수를 모두 썼어요. 이용권을 충전하면 계속 만들 수 있어요 ⚡',
+      no_credit: `무료 횟수를 모두 썼어요. ${GENERATION_PRICE.toLocaleString('ko-KR')}원 이상 충전하면 계속 만들 수 있어요.`,
+      trial_over: `무료 횟수를 모두 썼어요. ${GENERATION_PRICE.toLocaleString('ko-KR')}원 이상 충전하면 계속 만들 수 있어요.`,
       login_required: '비로그인 무료 1회를 다 쓰셨어요. 로그인하면 2번 더 무료로 만들 수 있어요 ✨',
       cooldown: '조금 빠르네요! 몇 초 뒤에 다시 시도해 주세요 🙂',
       busy: '지금 접속이 많아 잠시 쉬어가는 중이에요. 잠시 후 다시 시도해 주세요 🙏',
@@ -451,7 +452,7 @@ export default async function handler(req) {
     };
   }
 
-  const provider = env('LLM_PROVIDER', 'gemini');
+  const provider = env('LLM_PROVIDER', 'claude');
   const key = env('LLM_API_KEY');
   const primaryModel = provider === 'claude'
     ? pickClaudeModel(userPrompt, !!code)
@@ -480,10 +481,10 @@ export default async function handler(req) {
     const detail = await upstream.text().catch(() => '');
     // 실제 업스트림 오류는 서버 로그에만 남기고, 사용자에겐 공급자/모델이 드러나지 않는 일반 문구만 노출
     console.error('[generate] upstream error', upstream.status, detail.slice(0, 500));
-    const friendly =
+      const friendly =
       (upstream.status === 429 || upstream.status === 529)
-        ? '지금 만드는 분이 많아 잠시 대기 중이에요 🙏 이용권은 차감되지 않았어요. 10초쯤 뒤 다시 만들어 주세요.'
-        : '도구를 만드는 중 문제가 발생했어요. 이용권은 차감되지 않았어요. 잠시 후 다시 시도해 주세요.';
+        ? '지금 만드는 분이 많아 잠시 대기 중이에요 🙏 잔액은 차감되지 않았어요. 10초쯤 뒤 다시 만들어 주세요.'
+        : '도구를 만드는 중 문제가 발생했어요. 잔액은 차감되지 않았어요. 잠시 후 다시 시도해 주세요.';
     return json({ error: friendly }, 503);
   }
 
@@ -518,13 +519,13 @@ export default async function handler(req) {
         }
         if (!sentAny) {
           await restore();
-          controller.enqueue(enc.encode(`data: ${JSON.stringify({ error: '생성 결과를 받지 못했어요. 이용권은 차감되지 않았어요.' })}\n\n`));
+          controller.enqueue(enc.encode(`data: ${JSON.stringify({ error: '생성 결과를 받지 못했어요. 잔액은 차감되지 않았어요.' })}\n\n`));
         } else {
           controller.enqueue(enc.encode('data: [DONE]\n\n'));
         }
       } catch (e) {
         await restore();
-        controller.enqueue(enc.encode(`data: ${JSON.stringify({ error: '생성 중 연결이 끊겼어요. 이용권은 차감되지 않았어요.' })}\n\n`));
+        controller.enqueue(enc.encode(`data: ${JSON.stringify({ error: '생성 중 연결이 끊겼어요. 잔액은 차감되지 않았어요.' })}\n\n`));
       }
       controller.close();
     },
