@@ -75,6 +75,9 @@ const APP_SPEC_SYSTEM = `당신은 말로(Mallo)의 숨겨진 의도 분석/AppS
 8. 디자인 방향: 전문적인 SaaS 느낌, 반응형, 접근성, 모바일 사용성
 9. 기존 앱 수정 요청이라면 기존 기능을 깨지 않고 바꿔야 할 부분과 유지해야 할 부분
 10. 브라우저 단독으로 가능한 범위와, 실제 서버/결제/회원/외부 API가 필요한 부분의 체험용 대체 방식
+11. 한국 업무 기본값: 원화/부가세/거래처/담당자/상태/메모/CSV/인쇄/복사 중 도메인에 필요한 것
+12. 첨부 자료가 있으면 자료의 열 이름, 예시 행, 페이지 내용, 이미지 설명에서 앱 구조로 옮길 수 있는 단서
+13. 최종 결과를 내기 전 모델 스스로 확인해야 할 품질 점검 항목
 
 [질문 정책]
 - 질문을 만들지 않습니다. 답이 없으면 assumptions에 합리적 기본 가정을 적어 즉시 만들 수 있게 합니다.
@@ -116,6 +119,8 @@ const APP_SPEC_SYSTEM = `당신은 말로(Mallo)의 숨겨진 의도 분석/AppS
     "export": "CSV/인쇄/복사 등 필요한 내보내기",
     "ai": "내장 AI가 필요한 경우 말로 서버 브리지인 window.말로.ai 사용, 없으면 빈 문자열"
   },
+  "koreanBusinessDefaults": ["원화, 부가세, 거래처, 담당자, 상태값, 메모, CSV, 인쇄 등 도메인에 맞는 기본값"],
+  "sourceMaterials": ["첨부 자료에서 반영할 항목명, 예시 데이터, 업무 흐름 단서"],
   "sampleData": {
     "count": 6,
     "description": "샘플 데이터 방향"
@@ -130,6 +135,7 @@ const APP_SPEC_SYSTEM = `당신은 말로(Mallo)의 숨겨진 의도 분석/AppS
   "browserOnlyFallbacks": ["브라우저 단독으로 불가능한 요구의 체험용 대체 방식"],
   "assumptions": ["사용자가 말하지 않은 부분에 대한 기본 가정"],
   "acceptanceCriteria": ["완성 판정 기준"],
+  "qualityChecklist": ["첫 화면, 저장, 검색, 수정, 삭제, 내보내기, 모바일, 한국어 문구 점검"],
   "editPlan": ["기존 앱 수정 요청일 때 유지/변경할 점"]
 }`;
 
@@ -287,11 +293,12 @@ function buildUserPrompt(prompt, code, appSpec) {
   const hiddenSpec = appSpec
     ? `\n\n[내부 AppSpec — 사용자에게 보이지 않음]\n${appSpec}\n\n[실행 규칙]\n- 사용자 원문이 최우선입니다. AppSpec은 의도·데이터 구조·화면·기능·검증·샘플 데이터를 안정적으로 구현하기 위한 설계도입니다.\n- 1순위는 사용자 의도에 맞는 만족스러운 품질입니다. 토큰 절약 때문에 핵심 기능, 검증, 저장, 샘플 데이터, 사용 흐름을 생략하지 마세요.\n- AppSpec의 assumptions는 기본 가정으로 사용하고, 앱 안에 질문을 노출하지 마세요.\n- excludedIntents는 이번 단일 결과물에 넣지 마세요.\n- acceptanceCriteria를 모두 만족하는 완성된 단일 HTML 프로그램만 출력하세요.\n- 최종 출력에는 내부 AppSpec이나 분석 과정을 설명하지 말고 완성된 HTML만 내세요.`
     : `\n\n[내부 AppSpec 규칙 — 사용자에게 보이지 않음]\n사용자 요청을 먼저 primaryIntent, entities, views, workflows, features, validation, sampleData, design, assumptions, acceptanceCriteria로 스스로 구조화한 뒤 구현하세요. 모호한 부분은 가장 실무적인 기본값으로 결정하고, 품질을 우선해 하나의 완성품을 만드세요.`;
+  const qualityGate = `\n\n[말로 최종 품질 점검 — 사용자에게 보이지 않음]\n출력 직전에 다음을 스스로 점검하고 부족하면 고친 뒤 최종 HTML만 내세요.\n1. 한국 비전문가가 첫 화면만 보고 바로 무엇을 입력해야 하는지 알 수 있는가?\n2. 추가, 수정, 삭제, 검색/필터, 저장/복원, CSV/인쇄/복사 중 도메인에 필요한 기능이 실제로 동작하는가?\n3. 엑셀/PDF/이미지 등 첨부 자료의 항목명과 예시가 화면 구조와 샘플 데이터에 반영됐는가?\n4. 원화, 부가세, 날짜, 거래처, 담당자, 상태, 메모 등 한국 업무 기본값이 자연스럽게 들어갔는가?\n5. 모바일에서 표, 버튼, 입력창이 겹치거나 잘리지 않는가?\n6. TODO, placeholder, 내부 분석, AppSpec, 프롬프트 설명이 화면에 노출되지 않는가?`;
 
   if (code) {
-    return `기존 앱 코드:\n\`\`\`html\n${code}\n\`\`\`\n\n사용자 원문 수정 요청: ${prompt}${hiddenSpec}`;
+    return `기존 앱 코드:\n\`\`\`html\n${code}\n\`\`\`\n\n사용자 원문 수정 요청: ${prompt}${hiddenSpec}${qualityGate}`;
   }
-  return `사용자 원문 요청: ${prompt}${hiddenSpec}`;
+  return `사용자 원문 요청: ${prompt}${hiddenSpec}${qualityGate}`;
 }
 
 async function restoreGeneration(uid, quota) {
