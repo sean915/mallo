@@ -12,8 +12,7 @@ export const PACKS = {
 export const PLANS = PACKS;
 
 export function json(obj, status = 200) {
-  return new Response(JSON.stringify(obj, {
-  }), {
+  return new Response(JSON.stringify(obj), {
     status,
     headers: {
       'content-type': 'application/json; charset=utf-8',
