@@ -1,5 +1,5 @@
 {
-  "buildCommand": "node scripts/patch-index.js && node scripts/fix-scroll-layout.js && node scripts/landing-polish.js && node scripts/download-runtimes.js",
+  "buildCommand": "node scripts/patch-index.js && node scripts/fix-scroll-layout.js && node scripts/landing-polish.js && node scripts/app-polish.js && node scripts/download-runtimes.js",
   "outputDirectory": ".",
   "redirects": [
     {

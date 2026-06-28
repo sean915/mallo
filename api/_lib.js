@@ -1,12 +1,12 @@
 // 공용 유틸 (Vercel Edge Functions)
 
-// 프로그램 생성권 팩 (단일 출처) — 1회성 구매, 가격(원)/생성권 수(credits). 만료 없음.
-// 컨셉: 한 번 호출하면 원큐로 프로그램(SW) 하나를 만든다. 기준가: 프로그램 1건 2,900원.
+// AI 크레딧 팩 (단일 출처) — 1회성 구매, 가격(원)/크레딧 수. 만료 없음.
+// 크레딧 1건은 프로그램 생성/수정 또는 생성된 도구의 AI 기능 1회에 사용된다. 기준가: 1건 990원.
 export const PACKS = {
-  single:   { name: '프로그램 1건 만들기', price: 2900, credits: 1 },
-  light:    { name: '프로그램 5건 · 5% 할인', price: 13700, credits: 5 },
-  standard: { name: '프로그램 10건 · 10% 할인', price: 26100, credits: 10 },
-  pro:      { name: '프로그램 30건 · 15% 할인', price: 73900, credits: 30 },
+  single:   { name: 'AI 크레딧 1건', price: 990, credits: 1 },
+  light:    { name: 'AI 크레딧 5건 · 5% 할인', price: 4700, credits: 5 },
+  standard: { name: 'AI 크레딧 10건 · 10% 할인', price: 8900, credits: 10 },
+  pro:      { name: 'AI 크레딧 30건 · 15% 할인', price: 25200, credits: 30 },
 };
 // 하위호환 별칭(구 구독 코드가 참조해도 빌드 깨지지 않도록)
 export const PLANS = PACKS;

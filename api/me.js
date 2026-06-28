@@ -32,7 +32,7 @@ export default async function handler(req) {
     const trialLimit = Number(env('TRIAL_LIMIT', String(TRIAL_LIMIT)));
     const used = Number(p.usage_count || 0);          // 무료 체험 사용 횟수
     const trialLeft = Math.max(0, trialLimit - used); // 남은 무료 체험 횟수
-    const credits = Number(p.credits || 0);           // 충전한 이용권 잔여 횟수
+    const credits = Number(p.credits || 0);           // 충전한 AI 크레딧 잔여 건수
     const remaining = trialLeft + credits;            // 총 사용 가능 횟수
 
     return json({

@@ -1,9 +1,9 @@
-// POST /api/purchase — 프로그램 생성권 단건결제 검증 후 잔여 건수 충전
+// POST /api/purchase — AI 크레딧 단건결제 검증 후 잔여 건수 충전
 //
 // 흐름:
 //   1) 프론트에서 PortOne 단건결제(requestPayment, 카카오페이) 성공 → paymentId 수신
 //   2) 여기서 PortOne API로 실제 결제 상태·금액·구매자·상품 정보를 검증
-//   3) add_credits()로 잔여 생성권 충전(같은 paymentId면 중복 충전 안 됨 = 멱등)
+//   3) add_credits()로 잔여 크레딧 충전(같은 paymentId면 중복 충전 안 됨 = 멱등)
 //
 // 필요한 서버 환경변수: PORTONE_API_SECRET
 import { json, env, getUser, sb, PACKS } from './_lib.js';
@@ -80,7 +80,7 @@ export default async function handler(req) {
   if (custom) {
     if (custom.packId && custom.packId !== packId) return json({ error: '결제 상품 정보가 일치하지 않아요.' }, 400);
     if (custom.userId && custom.userId !== user.id) return json({ error: '결제자 정보가 일치하지 않아요.' }, 403);
-    if (custom.credits && Number(custom.credits) !== pack.credits) return json({ error: '생성권 수량이 일치하지 않아요.' }, 400);
+    if (custom.credits && Number(custom.credits) !== pack.credits) return json({ error: '크레딧 수량이 일치하지 않아요.' }, 400);
   }
 
   const orderName = readOrderName(pay);

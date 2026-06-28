@@ -13,7 +13,7 @@ create table if not exists public.profiles (
   usage_count int not null default 0
 );
 
-alter table public.profiles add column if not exists credits int not null default 0;              -- 만료 없는 잔여 이용권
+alter table public.profiles add column if not exists credits int not null default 0;              -- 만료 없는 잔여 AI 크레딧
 alter table public.profiles add column if not exists unlimited boolean not null default false;    -- 운영자/마스터 계정
 alter table public.profiles add column if not exists last_generated_at timestamptz;              -- 쿨다운용
 alter table public.profiles add column if not exists daily_usage_date date not null default current_date;
@@ -39,7 +39,7 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
 
--- 이용권 구매 기록: payment_id 기준 멱등 처리. 환불 시 미사용분 계산 근거로 사용.
+-- AI 크레딧 구매 기록: payment_id 기준 멱등 처리. 환불 시 미사용분 계산 근거로 사용.
 create table if not exists public.credit_purchases (
   payment_id text primary key,
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -56,7 +56,7 @@ drop policy if exists "own credit purchases read" on public.credit_purchases;
 create policy "own credit purchases read" on public.credit_purchases
   for select using (auth.uid() = user_id);
 
--- 결제 성공 후 이용권 충전(멱등)
+-- 결제 성공 후 AI 크레딧 충전(멱등)
 create or replace function public.add_credits(uid uuid, p_payment_id text, p_pack text, p_credits int, p_amount int)
 returns json language plpgsql security definer set search_path = public as $$
 declare
@@ -82,7 +82,7 @@ begin
   return json_build_object('added', inserted_count > 0, 'credits', coalesce(balance, 0));
 end $$;
 
--- 생성 1회 사용 처리: 무료 체험 3회 후 만료 없는 크레딧을 1회씩 차감.
+-- 생성/AI 기능 1회 사용 처리: 무료 체험 후 만료 없는 크레딧을 1회씩 차감.
 drop function if exists public.use_generation(uuid, int, int);
 drop function if exists public.use_generation(uuid, int, int, int, int);
 create or replace function public.use_generation(

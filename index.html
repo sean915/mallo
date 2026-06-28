@@ -165,6 +165,45 @@
   .landing-business a{color:rgba(247,247,251,.5);text-decoration:none}
   .landing-business a:hover{text-decoration:underline}
 
+  /* app-polish */
+  body.app-mode{background:#eef3f2}
+  .app-shell{background:linear-gradient(180deg,#f8fbfa 0%,#edf4f3 100%)}
+  header{background:rgba(255,255,255,.94);border-bottom:1px solid #dce9e7;box-shadow:0 10px 30px rgba(15,23,42,.05);backdrop-filter:blur(12px)}
+  .logo b{color:#0f9f73}
+  .trial-badge{background:#e8fbf3;color:#0b7b59}
+  .hbtn.primary{background:#101828;color:#fff}
+  .hbtn.primary:hover{background:#0f9f73}
+  .left{background:linear-gradient(180deg,#fff 0%,#fbfefd 100%);border-right:1px solid #d8e5e3}
+  .right{background:#f8faf9}
+  .welcome{padding:26px 20px 4px}
+  .welcome h2{font-size:20px;letter-spacing:0;color:#101828}
+  .welcome p{max-width:350px;color:#586571}
+  .tools-grid{gap:10px;padding-top:12px}
+  .tcard{border-color:#dde7e5;border-radius:10px;background:#fff;box-shadow:0 8px 20px rgba(15,23,42,.035);gap:8px;min-height:92px}
+  .tcard:hover{border-color:#0f9f73;background:#f4fffa;transform:translateY(-1px)}
+  .tcard .ic{width:30px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:8px;background:#e9fbf4;font-size:17px;line-height:1}
+  .tcard .nm{font-size:13.5px;letter-spacing:0}
+  .tcard .ds{color:#70808d}
+  .tcard.more{background:#101828;color:#fff;border-color:#101828;border-style:solid}
+  .tcard.more:hover{background:#0f9f73;border-color:#0f9f73;color:#fff}
+  .inputbar{background:rgba(255,255,255,.94);border-top:1px solid #dce9e7;padding:14px 16px 16px;box-shadow:0 -12px 30px rgba(15,23,42,.05)}
+  .inputbox{background:#fff;border:1.5px solid #cfe2df;border-radius:14px;box-shadow:0 12px 24px rgba(15,23,42,.06)}
+  .inputbox:focus-within{border-color:#0f9f73;box-shadow:0 0 0 4px rgba(15,159,115,.1)}
+  .send{background:#101828;border-radius:10px}
+  .send:hover{background:#0f9f73}
+  .hint{color:#74808b}
+  .preview-head{background:rgba(255,255,255,.95);border-bottom:1px solid #dce9e7}
+  .live-dot.on{background:#0f9f73;box-shadow:0 0 0 4px rgba(15,159,115,.15)}
+  .pbtn.go{background:#101828;border-color:#101828}
+  .pbtn.go:hover{background:#0f9f73;border-color:#0f9f73}
+  .preview-wrap{background:linear-gradient(135deg,#f7faf9,#edf4f3)}
+  .empty{background:transparent;color:#101828;padding:28px}
+  .empty .big{width:58px;height:58px;border-radius:16px;display:flex;align-items:center;justify-content:center;background:#e9fbf4;color:#0b7b59;font-size:24px;font-weight:900}
+  .empty h3{font-size:20px;letter-spacing:0}
+  .empty p{max-width:430px;color:#5d6975}
+  .site-footer{height:28px;flex-basis:28px;background:rgba(248,250,252,.72);color:#b7c0c8;border-top:1px solid #edf1f2;font-size:9px}
+  .site-footer a{color:#a8b2bd}
+
   .landing{position:relative;min-height:100vh;background:#05050a;color:#f7f7fb;isolation:isolate}
   .landing-canvas{position:fixed;inset:0;width:100%;height:100%;z-index:-2;background:#05050a}
   .landing::before{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;background:linear-gradient(180deg,rgba(5,5,10,.12),rgba(5,5,10,.82) 58%,#05050a 100%),repeating-linear-gradient(90deg,rgba(255,255,255,.045) 0 1px,transparent 1px 84px);mask-image:linear-gradient(180deg,#000 0%,rgba(0,0,0,.84) 68%,rgba(0,0,0,.2) 100%)}
@@ -257,6 +296,19 @@
     .landing-section{padding:68px 16px}
     .site-footer{flex-wrap:wrap;gap:2px 7px;padding:4px 10px;font-size:9px;align-content:center}
     .landing-business{padding:14px 12px 18px;font-size:9px}
+    .app-shell header{padding:0 12px;gap:8px}
+    .app-shell .logo{font-size:19px}
+    .app-shell .trial-badge{max-width:104px;overflow:hidden;text-overflow:ellipsis}
+    .app-shell .hbtn{font-size:12px;padding:7px 8px}
+    .mtabs{background:rgba(255,255,255,.95);border-bottom-color:#dce9e7}
+    .mtab{font-size:14px}
+    .mtab.active{color:#0f9f73;border-bottom-color:#0f9f73}
+    body.app-mode #__mlt{display:none}
+    .welcome{padding:20px 16px 4px}
+    .tools-grid{padding:12px 14px}
+    .tcard{min-height:86px;padding:12px}
+    .empty{padding:24px 18px}
+    .site-footer{height:42px;flex-basis:42px}
   }
   /* landing-polish */
   .landing::before{background:linear-gradient(180deg,rgba(5,5,10,.18),rgba(5,5,10,.78) 62%,#05050a 100%),repeating-linear-gradient(90deg,rgba(255,255,255,.03) 0 1px,transparent 1px 108px)}
@@ -298,6 +350,71 @@
     .download-stack{grid-template-columns:1fr}
     .section-title{font-size:clamp(27px,7.7vw,30px);line-height:1.16}
     .flow-strip{grid-template-columns:1fr}
+  }
+
+  /* app-polish-overrides */
+  body.app-mode{background:#eef3f2}
+  .app-shell{background:linear-gradient(180deg,#f8fbfa 0%,#edf4f3 100%)}
+  header{background:rgba(255,255,255,.94);border-bottom:1px solid #dce9e7;box-shadow:0 10px 30px rgba(15,23,42,.05);backdrop-filter:blur(12px)}
+  .logo b{color:#0f9f73}
+  .trial-badge{background:#e8fbf3;color:#0b7b59}
+  .hbtn.primary{background:#101828;color:#fff}
+  .hbtn.primary:hover{background:#0f9f73}
+  .left{background:linear-gradient(180deg,#fff 0%,#fbfefd 100%);border-right:1px solid #d8e5e3}
+  .right{background:#f8faf9}
+  .welcome{padding:26px 20px 4px}
+  .welcome h2{font-size:20px;letter-spacing:0;color:#101828}
+  .welcome p{max-width:350px;color:#586571}
+  .tools-grid{gap:10px;padding-top:12px}
+  .tcard{border-color:#dde7e5;border-radius:10px;background:#fff;box-shadow:0 8px 20px rgba(15,23,42,.035);gap:8px;min-height:92px}
+  .tcard:hover{border-color:#0f9f73;background:#f4fffa;transform:translateY(-1px)}
+  .tcard .ic{width:30px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:8px;background:#e9fbf4;font-size:17px;line-height:1}
+  .tcard .nm{font-size:13.5px;letter-spacing:0}
+  .tcard .ds{color:#70808d}
+  .tcard.more{background:#101828;color:#fff;border-color:#101828;border-style:solid}
+  .tcard.more:hover{background:#0f9f73;border-color:#0f9f73;color:#fff}
+  .inputbar{background:rgba(255,255,255,.94);border-top:1px solid #dce9e7;padding:14px 16px 16px;box-shadow:0 -12px 30px rgba(15,23,42,.05)}
+  .inputbox{background:#fff;border:1.5px solid #cfe2df;border-radius:14px;box-shadow:0 12px 24px rgba(15,23,42,.06)}
+  .inputbox:focus-within{border-color:#0f9f73;box-shadow:0 0 0 4px rgba(15,159,115,.1)}
+  .attach-btn{width:36px;height:36px;border-radius:10px;background:#eef7f5;color:#0b7b59;font-size:20px;font-weight:900;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+  .attach-btn:hover{background:#ddf3ec}
+  .attach-input{display:none}
+  .attach-list{display:flex;flex-wrap:wrap;gap:7px;margin-top:9px}
+  .attach-item{display:inline-flex;align-items:center;gap:7px;max-width:100%;border:1px solid #dce9e7;background:#f8fbfa;color:#344054;border-radius:999px;padding:6px 8px;font-size:12px;font-weight:700}
+  .attach-item img{width:22px;height:22px;border-radius:6px;object-fit:cover;background:#e9eef2}
+  .attach-item .name{max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .attach-item .meta{color:#7a8793;font-weight:600}
+  .attach-item button{width:20px;height:20px;border-radius:50%;background:#e6ecef;color:#667085;font-weight:900;line-height:1}
+  .attach-item button:hover{background:#d8e2e5;color:#101828}
+  .send{background:#101828;border-radius:10px}
+  .send:hover{background:#0f9f73}
+  .hint{color:#74808b}
+  .preview-head{background:rgba(255,255,255,.95);border-bottom:1px solid #dce9e7}
+  .live-dot.on{background:#0f9f73;box-shadow:0 0 0 4px rgba(15,159,115,.15)}
+  .pbtn.go{background:#101828;border-color:#101828}
+  .pbtn.go:hover{background:#0f9f73;border-color:#0f9f73}
+  .preview-wrap{background:linear-gradient(135deg,#f7faf9,#edf4f3)}
+  .empty{background:transparent;color:#101828;padding:28px}
+  .empty .big{width:58px;height:58px;border-radius:16px;display:flex;align-items:center;justify-content:center;background:#e9fbf4;color:#0b7b59;font-size:24px;font-weight:900}
+  .empty h3{font-size:20px;letter-spacing:0}
+  .empty p{max-width:430px;color:#5d6975}
+  .site-footer{height:28px;flex-basis:28px;background:rgba(248,250,252,.72);color:#b7c0c8;border-top:1px solid #edf1f2;font-size:9px}
+  .site-footer a{color:#a8b2bd}
+  @media (max-width:768px){
+    .app-shell header{padding:0 12px;gap:8px}
+    .app-shell .logo{font-size:19px}
+    .app-shell .trial-badge{max-width:104px;overflow:hidden;text-overflow:ellipsis}
+    .app-shell .hbtn{font-size:12px;padding:7px 8px}
+    .mtabs{background:rgba(255,255,255,.95);border-bottom-color:#dce9e7}
+    .mtab{font-size:14px}
+    .mtab.active{color:#0f9f73;border-bottom-color:#0f9f73}
+    body.app-mode #__mlt{display:none}
+    .welcome{padding:20px 16px 4px}
+    .tools-grid{padding:12px 14px}
+    .tcard{min-height:86px;padding:12px}
+    .empty{padding:24px 18px}
+    .attach-item .name{max-width:112px}
+    .site-footer{height:42px;flex-basis:42px}
   }
 </style>
 </head>
@@ -405,23 +522,23 @@
   <div class="tagline">말로 만드는 내 업무 도구</div>
   <div class="spacer"></div>
   <div class="trial-badge hidden" id="trialBadge"></div>
-  <button class="hbtn primary hidden" id="btnCharge">💳 충전</button>
-  <button class="hbtn hidden" id="btnMyTools">📂 내 도구함</button>
-  <button class="hbtn primary hidden" id="btnFeedback">💬 피드백</button>
-  <button class="hbtn primary hidden" id="btnLogin">🔑 로그인</button>
+  <button class="hbtn primary hidden" id="btnCharge">충전</button>
+  <button class="hbtn hidden" id="btnMyTools">내 도구함</button>
+  <button class="hbtn primary hidden" id="btnFeedback">피드백</button>
+  <button class="hbtn primary hidden" id="btnLogin">로그인</button>
   <button class="hbtn hidden" id="btnLogout">로그아웃</button>
 </header>
 
 <div class="mtabs" id="mtabs">
-  <button class="mtab active" data-pane="make">✏️ 만들기</button>
-  <button class="mtab" data-pane="preview">👁️ 미리보기</button>
+  <button class="mtab active" data-pane="make">만들기</button>
+  <button class="mtab" data-pane="preview">미리보기</button>
 </div>
 
 <div class="main" id="mainEl">
   <div class="left">
     <div class="welcome" id="welcome">
-      <h2>어떤 도구가 필요하세요? 🛠️</h2>
-      <p>아래에서 고르면 <b>바로 만들어 드려요.</b> 누르기만 하면 끝 — 만든 뒤엔 말로 고치고, 입력한 내용은 자동으로 저장돼요.</p>
+      <h2>필요한 업무를 말하면 도구가 됩니다</h2>
+      <p>원하는 일을 고르거나 아래 입력창에 설명해 주세요. 말로가 바로 실행 가능한 웹 도구로 만들고, 만든 뒤에도 말로 수정할 수 있어요.</p>
     </div>
     <div class="tools-grid" id="chips">
       <button class="tcard" data-prompt="거래처·고객 연락처를 관리하는 프로그램 만들어줘. 이름·회사·연락처·이메일·메모를 등록하고, 표로 목록 보기, 이름/회사 검색, 추가·수정·삭제, 엑셀(CSV) 내보내기. 한국어 샘플 6개 채워줘. 입력한 내용은 저장돼서 다시 열어도 남아 있게."><span class="ic">👥</span><span class="nm">거래처·고객 관리</span><span class="ds">연락처·메모·검색</span></button>
@@ -433,7 +550,7 @@
       <button class="tcard" data-prompt="회의록·업무 메모 정리 프로그램 만들어줘. 제목·날짜·참석자·내용·결정사항/할일을 기록, 목록과 검색, 클릭하면 상세 보기, 추가·수정·삭제, 텍스트로 복사 버튼. 한국어 샘플 채워줘. 저장되게."><span class="ic">📝</span><span class="nm">회의록·메모</span><span class="ds">결정사항·검색</span></button>
       <button class="tcard" data-prompt="예약·일정 관리 프로그램 만들어줘. 날짜·시간·고객명·연락처·메모로 예약 등록, 날짜별 목록과 달력 보기, 오늘 예약 강조, 검색, 추가·수정·삭제, CSV 내보내기. 한국어 샘플 채워줘. 저장되게."><span class="ic">📅</span><span class="nm">예약·일정</span><span class="ds">달력·오늘 예약</span></button>
       <button class="tcard" data-prompt="실무용 계산기 프로그램 만들어줘. 부가세(공급가↔합계), 마진율·판매가, 할인가 계산을 탭으로 전환해서 쓸 수 있게. 입력하면 즉시 계산 결과 표시, 큰 글씨로 보기 쉽게. 한국어로."><span class="ic">🧮</span><span class="nm">실무 계산기</span><span class="ds">부가세·마진·할인</span></button>
-      <button class="tcard more" id="tcMore">✏️ 직접 말로 만들기</button>
+      <button class="tcard more" id="tcMore">직접 말로 만들기</button>
     </div>
     <div class="chips hidden" id="editChips">
       <button class="chip" data-edit="글자랑 버튼을 더 크고 보기 쉽게 키워줘">🔍 크게</button>
@@ -445,10 +562,13 @@
     <div class="chat" id="chat"></div>
     <div class="inputbar">
       <div class="inputbox">
+        <button class="attach-btn" id="btnAttach" title="파일 첨부" type="button">＋</button>
+        <input class="attach-input" id="fileInput" type="file" accept="image/*,.pdf,.xlsx,.xls,.txt,.csv,.tsv,.json,.md,.html,.xml" multiple>
         <textarea id="input" rows="1" placeholder="예) 거래처 연락처 정리하는 표 만들어줘"></textarea>
         <button class="send" id="btnSend" title="만들기">↑</button>
       </div>
-      <div class="hint">필요한 걸 한국말로 적으면 돼요 · 만든 뒤 "글자 더 크게 해줘"처럼 말로 고칠 수 있어요</div>
+      <div class="attach-list hidden" id="attachList"></div>
+      <div class="hint">필요한 걸 한국말로 적으면 돼요 · 파일/사진은 참고자료로 첨부할 수 있어요</div>
     </div>
   </div>
 
@@ -464,9 +584,9 @@
     <div class="preview-wrap">
       <iframe id="frame" sandbox="allow-scripts allow-modals allow-forms allow-popups"></iframe>
       <div class="empty" id="empty">
-        <div class="big">🛠️</div>
-        <h3>아직 만든 도구가 없어요</h3>
-        <p>왼쪽에서 필요한 도구를 고르면<br>여기서 바로 만들어지고, 바로 써볼 수 있어요.</p>
+        <div class="big">M</div>
+        <h3>만들 준비가 완료됐어요</h3>
+        <p>왼쪽에서 업무 템플릿을 고르거나 아래 입력창에 필요한 흐름을 말로 설명해 주세요.<br>완성된 도구가 이곳에 바로 나타납니다.</p>
       </div>
     </div>
   </div>
@@ -528,7 +648,7 @@
     <textarea id="fbText" rows="4" placeholder="자유롭게 후기를 남겨 주세요 (예: 어떤 앱을 만들고 싶었는지, 아쉬운 점)" style="width:100%;border:2px solid var(--line);border-radius:12px;padding:12px 14px;font-size:15px;font-family:inherit;line-height:1.5;resize:none;outline:none;box-sizing:border-box"></textarea>
     <div class="planbox hidden" id="planBox"></div>
     <div class="pay-note hidden" id="payNote">
-      서비스 제공일: 결제 완료 즉시 생성권 충전 · 교환: 디지털 생성권 특성상 다른 상품으로 교환 불가 · 환불: 결제 후 7일 이내 미사용분 환불, 사용분 제외 · <a href="/refund.html" target="_blank">환불 정책 보기</a>
+      서비스 제공일: 결제 완료 즉시 AI 크레딧 충전 · 도구 생성/수정 또는 도구 안의 AI 기능 사용 시 1건 차감 · 환불: 결제 후 7일 이내 미사용분 환불, 사용분 제외 · <a href="/refund.html" target="_blank">환불 정책 보기</a>
     </div>
     <button class="bigbtn" id="btnFbSend">의견 보내기</button>
     <button class="bigbtn gray" id="btnFbClose">닫기</button>
@@ -603,9 +723,49 @@ function setPane(p){
 $('mtabs').addEventListener('click', e=>{ const b=e.target.closest('.mtab'); if(b) setPane(b.dataset.pane); });
 
 /* ================== 생성 코드 ↔ 미리보기 데이터 저장 shim ================== */
+const PREVIEW_AI_BRIDGE = `
+  if(!window.__malloAiBridgeInstalled){
+    window.__malloAiBridgeInstalled = true;
+    const ko = window.말로 = window.말로 || {};
+    const en = window.mallo = window.mallo || ko;
+    let aiSeq = 0;
+    const HELP = 'AI 기능은 말로 온라인에서 로그인 후 크레딧으로 사용할 수 있어요.';
+    ko.ai = en.ai = function(prompt){
+      return new Promise((resolve, reject)=>{
+        const id = 'ai_' + Date.now() + '_' + (++aiSeq);
+        listeners[id] = { resolve, reject };
+        try{ parent.postMessage({ __mallo:'ai', id, prompt:String(prompt || '') }, '*'); }
+        catch(e){ delete listeners[id]; reject(new Error(HELP)); return; }
+        setTimeout(()=>{
+          if(!listeners[id]) return;
+          delete listeners[id];
+          reject(new Error('AI 응답이 지연되고 있어요. 잠시 후 다시 시도해 주세요.'));
+        }, 90000);
+      });
+    };
+    ko.aiSetup = en.aiSetup = function(){ throw new Error(HELP); };
+  }
+`;
 function withShim(html, seed){
   const seedJson = JSON.stringify(seed || {}).replace(/<\/script/gi, '<\\/script');
-  const shim = `<script>\n(function(){\n  const SEED=${seedJson};\n  const KEY='__mallo_internal__';\n  const listeners=[];\n  const memory={};\n  function post(){ try{ parent.postMessage({__mallo:'data',data:memory},'*'); }catch(e){} }\n  function patch(){\n    const rawSet=localStorage.setItem.bind(localStorage), rawGet=localStorage.getItem.bind(localStorage), rawRemove=localStorage.removeItem.bind(localStorage);\n    localStorage.setItem=function(k,v){ memory[k]=v; post(); try{return rawSet(k,v)}catch(e){} };\n    localStorage.getItem=function(k){ if(Object.prototype.hasOwnProperty.call(memory,k)) return memory[k]; try{return rawGet(k)}catch(e){return null} };\n    localStorage.removeItem=function(k){ delete memory[k]; post(); try{return rawRemove(k)}catch(e){} };\n  }\n  try{ Object.assign(memory, SEED||{}); patch(); }catch(e){}\n  window.말로 = window.말로 || {}; window.mallo = window.mallo || window.말로;\n  window.말로.ai = window.mallo.ai = function(prompt){\n    return new Promise((resolve,reject)=>{\n      const id=Math.random().toString(36).slice(2);\n      listeners[id]={resolve,reject};\n      parent.postMessage({__mallo:'ai',id,prompt:String(prompt||'')},'*');\n      setTimeout(()=>{ if(listeners[id]){ delete listeners[id]; reject(new Error('AI 응답 시간이 초과됐어요')); }},30000);\n    });\n  };\n  window.addEventListener('message',e=>{ const d=e.data; if(d&&d.__mallo==='ai_result'&&listeners[d.id]){ const l=listeners[d.id]; delete listeners[d.id]; d.error?l.reject(new Error(d.error)):l.resolve(d.text||''); } });\n})();\n<\/script>`;
+  const shim = `<script>
+(function(){
+  const SEED=${seedJson};
+  const KEY='__mallo_internal__';
+  const listeners=[];
+  const memory={};
+  function post(){ try{ parent.postMessage({__mallo:'data',data:memory},'*'); }catch(e){} }
+  function patch(){
+    const rawSet=localStorage.setItem.bind(localStorage), rawGet=localStorage.getItem.bind(localStorage), rawRemove=localStorage.removeItem.bind(localStorage);
+    localStorage.setItem=function(k,v){ memory[k]=v; post(); try{return rawSet(k,v)}catch(e){} };
+    localStorage.getItem=function(k){ if(Object.prototype.hasOwnProperty.call(memory,k)) return memory[k]; try{return rawGet(k)}catch(e){return null} };
+    localStorage.removeItem=function(k){ delete memory[k]; post(); try{return rawRemove(k)}catch(e){} };
+  }
+  try{ Object.assign(memory, SEED||{}); patch(); }catch(e){}
+${PREVIEW_AI_BRIDGE}
+  window.addEventListener('message',e=>{ const d=e.data; if(d&&d.__mallo==='ai_result'&&listeners[d.id]){ const l=listeners[d.id]; delete listeners[d.id]; d.error?l.reject(new Error(d.error)):l.resolve(d.text||''); } });
+})();
+<\/script>`;
   if(/<head[^>]*>/i.test(html)) return html.replace(/<head[^>]*>/i, m => m + shim);
   return shim + html;
 }
@@ -649,14 +809,22 @@ window.addEventListener('message', (e)=>{
 });
 async function handleAiRequest(source, id, prompt){
   try{
-    if(!S.session) throw new Error('로그인이 필요해요');
+    if(!S.session) throw new Error('AI 기능은 로그인 후 크레딧으로 사용할 수 있어요.');
     const res = await fetch('/api/ai', {
-      method:'POST', headers:{'content-type':'application/json', authorization:`Bearer ${S.session.access_token}`},
+      method:'POST',
+      headers:{ 'content-type':'application/json', authorization:`Bearer ${S.session.access_token}` },
       body: JSON.stringify({ prompt })
     });
-    const j = await res.json();
-    source.postMessage({__mallo:'ai_result', id, text:j.text||'', error:j.error||null}, '*');
-  }catch(e){ source.postMessage({__mallo:'ai_result', id, error:e.message||'AI 호출 실패'}, '*'); }
+    const j = await res.json().catch(()=>({}));
+    if(!res.ok || j.error){
+      if(j.code === 'no_credit') openCharge();
+      throw new Error(j.error || 'AI 처리 중 문제가 생겼어요.');
+    }
+    source.postMessage({__mallo:'ai_result', id, text:j.text||'', error:null}, '*');
+    refreshMe();
+  }catch(e){
+    try{ source.postMessage({__mallo:'ai_result', id, error:e.message||'AI 호출 실패'}, '*'); }catch(_){}
+  }
 }
 async function saveCurrentTool(prompt){
   if(!S.session || !S.code) return;
@@ -868,7 +1036,7 @@ async function refreshMe(){
       b.textContent = '♾️ 무제한 (마스터)';
       b.classList.remove('expired');
     } else if(rem > 0){
-      b.textContent = `⚡ 남은 횟수 ${rem}회`;
+      b.textContent = `⚡ 남은 크레딧 ${rem}건`;
       b.classList.remove('expired');
     } else {
       b.textContent = '⚡ 충전 필요';
@@ -903,10 +1071,10 @@ $('btnLogout').onclick = async ()=>{ await S.supabase.auth.signOut(); location.r
 $('btnLogin').onclick = ()=> openLogin();
 $('btnLoginClose').onclick = ()=> closeLogin();
 
-/* ================== 결제(포트원 · 카카오페이 단건결제 · 프로그램 생성권 충전) ================== */
-function packOrderName(pack){ return '말로 프로그램 생성권 ' + (pack.credits || 0) + '건'; }
+/* ================== 결제(포트원 · 카카오페이 단건결제 · AI 크레딧 충전) ================== */
+function packOrderName(pack){ return '말로 AI 크레딧 ' + (pack.credits || 0) + '건'; }
 
-// 모달에 생성권 카드 렌더링
+// 모달에 크레딧 카드 렌더링
 function renderPlans(){
   const box = $('planBox'); if(!box) return;
   const packs = (S.cfg && S.cfg.plans) || {};
@@ -915,7 +1083,7 @@ function renderPlans(){
     const b = document.createElement('button');
     b.className = 'plan' + (id === 'standard' ? ' best' : '');
     const badge = id === 'standard' ? '<span class="badge">인기</span>' : '';
-    b.innerHTML = '<div><div class="pn">'+p.name+badge+'</div><div class="pd">'+p.credits+'건 생성권 · 만료 없음 · 즉시 충전</div></div><div class="pv">'+p.price.toLocaleString()+'원<br><span style="font-size:11px;color:#6b7684">결제하기</span></div>';
+    b.innerHTML = '<div><div class="pn">'+p.name+badge+'</div><div class="pd">'+p.credits+'건 크레딧 · 도구 생성/AI 기능에 사용 · 만료 없음</div></div><div class="pv">'+p.price.toLocaleString()+'원<br><span style="font-size:11px;color:#6b7684">결제하기</span></div>';
     b.onclick = ()=> startPurchase(id);
     box.appendChild(b);
   });
@@ -968,7 +1136,7 @@ async function confirmPurchase(paymentId, packId){
   $('fbModal').classList.add('hidden');
   await refreshMe();
   const added = Number(result.credits_added || 0);
-  toast(added ? added+'건 충전 완료! 이제 프로그램을 만들 수 있어요 🎉' : '충전 확인 완료!');
+  toast(added ? added+'건 크레딧 충전 완료! 이제 계속 사용할 수 있어요 🎉' : '충전 확인 완료!');
 }
 // 모바일: 카카오페이 결제 후 redirectUrl 로 돌아왔을 때 처리
 function handlePayReturn(){
@@ -996,7 +1164,7 @@ function extractHtml(text){
   return body.trim();
 }
 
-async function generate(req){
+async function generate(req, meta={}){
   if(S.busy) return;
   const loggedIn = !!S.session;
   // 비로그인 무료 1회 소진 → 로그인 유도(서버도 이중 검증)
@@ -1010,7 +1178,7 @@ async function generate(req){
   $('welcome').classList.add('hidden');
   $('chips').classList.add('hidden');
   $('editChips').classList.add('hidden');
-  addMsg('user', req);
+  addMsg('user', meta.display || req);
   if(mq.matches) setPane('preview');   // 모바일: 만들어지는 화면으로 전환
   const botMsg = addMsg('bot', '', 'working');
   botMsg.innerHTML = '<span class="stepText">' + WORKING_STEPS[0] + '</span><span class="dots"></span>';
@@ -1102,14 +1270,178 @@ async function generate(req){
 }
 
 /* ================== 이벤트 ================== */
+const ATTACH_MAX_FILES = 3;
+const ATTACH_MAX_BYTES = 5 * 1024 * 1024;
+const ATTACH_TEXT_LIMIT = 1500;
+const ATTACH_TABLE_ROWS = 40;
+const ATTACH_PDF_PAGES = 5;
+S.attachments = S.attachments || [];
+
+function formatAttachmentSize(bytes){
+  if(bytes < 1024) return bytes + 'B';
+  if(bytes < 1024 * 1024) return Math.round(bytes / 1024) + 'KB';
+  return (bytes / 1024 / 1024).toFixed(1) + 'MB';
+}
+function isTextAttachment(file){
+  const name = file.name.toLowerCase();
+  return /^text\//.test(file.type) || /\.(txt|csv|tsv|json|md|html|xml)$/i.test(name);
+}
+function isSpreadsheetAttachment(file){
+  return /\.(xlsx|xls)$/i.test(file.name);
+}
+function isPdfAttachment(file){
+  return file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+}
+function loadAttachmentScript(src, globalName){
+  if(window[globalName]) return Promise.resolve(window[globalName]);
+  return new Promise((resolve, reject)=>{
+    const old = document.querySelector('script[data-attach-lib=' + globalName + ']');
+    if(old){
+      old.addEventListener('load', ()=>resolve(window[globalName]));
+      old.addEventListener('error', ()=>reject(new Error(globalName + ' 로딩 실패')));
+      return;
+    }
+    const s = document.createElement('script');
+    s.src = src;
+    s.async = true;
+    s.dataset.attachLib = globalName;
+    s.onload = ()=>window[globalName] ? resolve(window[globalName]) : reject(new Error(globalName + ' 로딩 실패'));
+    s.onerror = ()=>reject(new Error(globalName + ' 로딩 실패'));
+    document.head.appendChild(s);
+  });
+}
+async function readSpreadsheetAttachment(file){
+  const XLSXLib = await loadAttachmentScript('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js', 'XLSX');
+  const buf = await file.arrayBuffer();
+  const book = XLSXLib.read(buf, { type:'array', cellDates:true });
+  const sheetName = book.SheetNames[0];
+  const sheet = book.Sheets[sheetName];
+  const rows = XLSXLib.utils.sheet_to_json(sheet, { header:1, defval:'' }).slice(0, ATTACH_TABLE_ROWS);
+  const table = rows.map(row=>row.map(v=>String(v).replace(/\s+/g, ' ').trim()).join(' | ')).filter(Boolean).join('\n');
+  return '엑셀 파일: ' + file.name + '\n첫 시트: ' + (sheetName || 'Sheet1') + '\n행/열 일부:\n' + table.slice(0, ATTACH_TEXT_LIMIT) + (rows.length >= ATTACH_TABLE_ROWS ? '\n...(이하 생략)' : '');
+}
+async function readPdfAttachment(file){
+  const pdfjs = await loadAttachmentScript('https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js', 'pdfjsLib');
+  pdfjs.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const pdf = await pdfjs.getDocument({ data:bytes }).promise;
+  const maxPages = Math.min(pdf.numPages || 0, ATTACH_PDF_PAGES);
+  const chunks = [];
+  for(let p=1; p<=maxPages; p++){
+    const page = await pdf.getPage(p);
+    const content = await page.getTextContent();
+    const text = content.items.map(item=>item.str || '').join(' ').replace(/\s+/g, ' ').trim();
+    if(text) chunks.push('[p.' + p + '] ' + text);
+  }
+  const body = chunks.join('\n').slice(0, ATTACH_TEXT_LIMIT);
+  return 'PDF 파일: ' + file.name + '\n페이지: ' + (pdf.numPages || maxPages) + '쪽 중 ' + maxPages + '쪽 읽음\n내용 일부:\n' + (body || '텍스트를 찾지 못했어요. 스캔 이미지 PDF라면 핵심 내용을 프롬프트에 함께 적어 주세요.');
+}
+function getImageSize(file){
+  return new Promise(resolve=>{
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = ()=>{ const info = { width:img.naturalWidth, height:img.naturalHeight, preview:url }; resolve(info); };
+    img.onerror = ()=>{ URL.revokeObjectURL(url); resolve({ width:0, height:0, preview:'' }); };
+    img.src = url;
+  });
+}
+async function readAttachment(file){
+  if(file.size > ATTACH_MAX_BYTES) throw new Error(file.name + '은 5MB 이하만 첨부할 수 있어요');
+  const base = { id:Date.now() + '-' + Math.random().toString(16).slice(2), name:file.name, type:file.type || '알 수 없음', size:file.size };
+  if(file.type.startsWith('image/')){
+    const info = await getImageSize(file);
+    return { ...base, kind:'image', preview:info.preview, text:'이미지 파일: ' + file.name + ' · ' + (info.width ? info.width + 'x' + info.height + 'px · ' : '') + formatAttachmentSize(file.size) + '. 화면 구조, 상품, 분위기, 참고자료로 사용할 수 있습니다. 사진 속 글자를 정확히 읽어야 하면 프롬프트에 핵심 내용을 함께 적어 주세요.' };
+  }
+  if(isPdfAttachment(file)){
+    return { ...base, kind:'pdf', text:await readPdfAttachment(file) };
+  }
+  if(isSpreadsheetAttachment(file)){
+    return { ...base, kind:'sheet', text:await readSpreadsheetAttachment(file) };
+  }
+  if(isTextAttachment(file)){
+    let text = await file.text();
+    text = text.replace(/\u0000/g, '').replace(/\r\n/g, '\n').trim();
+    const lines = text.split('\n').slice(0, 40).join('\n');
+    const clipped = lines.slice(0, ATTACH_TEXT_LIMIT);
+    return { ...base, kind:'text', text:'파일명: ' + file.name + '\n형식: ' + (file.type || 'text') + '\n내용 일부:\n' + clipped + (text.length > clipped.length ? '\n...(이하 생략)' : '') };
+  }
+  return { ...base, kind:'file', text:'파일명: ' + file.name + '\n형식: ' + (file.type || '알 수 없음') + '\n크기: ' + formatAttachmentSize(file.size) + '\n이 파일은 현재 내용 자동 추출 대상이 아니므로, 필요한 핵심 내용을 프롬프트에 함께 적어 주세요.' };
+}
+function renderAttachments(){
+  const list = $('attachList');
+  if(!list) return;
+  list.innerHTML = '';
+  list.classList.toggle('hidden', !S.attachments.length);
+  S.attachments.forEach(item=>{
+    const chip = document.createElement('div');
+    chip.className = 'attach-item';
+    if(item.preview){
+      const img = document.createElement('img');
+      img.src = item.preview;
+      img.alt = '';
+      chip.appendChild(img);
+    }
+    const name = document.createElement('span');
+    name.className = 'name';
+    name.textContent = item.name;
+    const meta = document.createElement('span');
+    meta.className = 'meta';
+    meta.textContent = formatAttachmentSize(item.size);
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.textContent = '×';
+    del.title = '첨부 제거';
+    del.onclick = ()=>{
+      if(item.preview) URL.revokeObjectURL(item.preview);
+      S.attachments = S.attachments.filter(a=>a.id !== item.id);
+      renderAttachments();
+    };
+    chip.appendChild(name);
+    chip.appendChild(meta);
+    chip.appendChild(del);
+    list.appendChild(chip);
+  });
+}
+async function addAttachments(files){
+  const incoming = Array.from(files || []);
+  if(!incoming.length) return;
+  const slots = Math.max(0, ATTACH_MAX_FILES - S.attachments.length);
+  if(incoming.length > slots) toast('첨부는 최대 ' + ATTACH_MAX_FILES + '개까지 가능해요');
+  for(const file of incoming.slice(0, slots)){
+    try{ S.attachments.push(await readAttachment(file)); }
+    catch(e){ toast(e.message || '파일을 읽지 못했어요'); }
+  }
+  renderAttachments();
+}
+function buildAttachmentPrompt(userText){
+  if(!S.attachments.length) return userText;
+  const base = userText || '첨부한 자료를 참고해서 업무용 웹 도구를 만들어줘';
+  const budget = Math.max(700, 3600 - base.length);
+  const refs = S.attachments.map((a, i)=>'[' + (i + 1) + '] ' + a.text).join('\n\n').slice(0, budget);
+  return base + '\n\n[첨부 참고자료]\n' + refs + '\n\n[첨부 사용 지침]\n첨부자료의 항목명, 예시 데이터, 화면 구성 단서, 업무 맥락을 반영하되 앱 안에 첨부 원문 전체를 그대로 노출하지 마세요.';
+}
+function attachmentLabel(){
+  return S.attachments.length ? '\n첨부: ' + S.attachments.map(a=>a.name).join(', ') : '';
+}
+function clearAttachments(){
+  S.attachments.forEach(a=>{ if(a.preview) URL.revokeObjectURL(a.preview); });
+  S.attachments = [];
+  renderAttachments();
+}
+
 const input = $('input');
 function submit(){
   const v = input.value.trim();
-  if(!v || S.busy) return;
+  if((!v && !S.attachments.length) || S.busy) return;
+  const display = (v || '첨부한 자료를 참고해서 도구 만들어줘') + attachmentLabel();
+  const prompt = buildAttachmentPrompt(v);
   input.value = ''; input.style.height = 'auto';
-  generate(v);
+  clearAttachments();
+  generate(prompt, { display });
 }
 $('btnSend').onclick = submit;
+$('btnAttach') && ($('btnAttach').onclick = ()=>$('fileInput').click());
+$('fileInput') && ($('fileInput').onchange = e=>{ addAttachments(e.target.files); e.target.value = ''; });
 input.addEventListener('keydown', e=>{
   if(e.key === 'Enter' && !e.shiftKey && !e.isComposing){ e.preventDefault(); submit(); }
 });
@@ -1246,8 +1578,8 @@ function openFeedback(beta){
   $('payNote').classList.add('hidden');
   if(beta){
     if(payOn){
-      $('fbTitle').textContent = '무료 생성권을 모두 사용했어요';
-      $('fbSub').textContent = '계속 만들려면 필요한 생성권 상품을 선택해 주세요. 구매한 생성권은 만료 없이 사용할 수 있습니다.';
+      $('fbTitle').textContent = '무료 체험을 모두 사용했어요';
+      $('fbSub').textContent = '도구 생성과 AI 기능 사용에 필요한 크레딧을 선택해 주세요. 구매한 크레딧은 만료 없이 사용할 수 있습니다.';
       $('fbStars').classList.add('hidden');
       $('fbText').classList.add('hidden');
       $('btnFbSend').classList.add('hidden');
@@ -1268,8 +1600,8 @@ function openFeedback(beta){
 }
 function openCharge(){
   if(!payConfigured()){ toast('결제 준비 중이에요'); return; }
-  $('fbTitle').textContent = '생성권 충전';
-  $('fbSub').textContent = '상품 종류와 가격을 확인한 뒤 결제할 상품을 선택해 주세요.';
+  $('fbTitle').textContent = 'AI 크레딧 충전';
+  $('fbSub').textContent = '도구 생성, 수정, 도구 안의 AI 기능 사용에 필요한 크레딧 상품을 선택해 주세요.';
   $('fbStars').classList.add('hidden');
   $('fbText').classList.add('hidden');
   $('btnFbSend').classList.add('hidden');
@@ -1313,13 +1645,20 @@ function enterApp(){
   setTimeout(()=>{ try{ input.focus(); }catch(e){} }, 120);
 }
 
+function maybeEnterAppFromHash(){
+  if(location.hash !== '#app') return;
+  const appShell = $('appShell');
+  if(!appShell || !appShell.classList.contains('hidden')) return;
+  enterApp();
+}
+
 function initLanding(){
   document.querySelectorAll('[data-enter-app]').forEach(btn => btn.addEventListener('click', enterApp));
   document.querySelectorAll('[data-scroll-target]').forEach(btn => btn.addEventListener('click', ()=>{
     const target = document.getElementById(btn.dataset.scrollTarget);
     if(target) target.scrollIntoView({ behavior:'smooth', block:'start' });
   }));
-  if(location.hash === '#app') enterApp();
+  maybeEnterAppFromHash();
   initLandingCanvas();
 }
 
@@ -1409,6 +1748,8 @@ function initLandingCanvas(){
 initLanding();
 bindViewerButtons();
 initAuth();
+maybeEnterAppFromHash();
+window.addEventListener('hashchange', maybeEnterAppFromHash);
 </script>
 <script>(function mainFn(T){
   /*__mallo_i18n__*/

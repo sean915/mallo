@@ -9,6 +9,17 @@ const notFoundHtml = `<!DOCTYPE html>
   <div>도구를 찾을 수 없어요.<br>링크가 만료됐거나 비공개 도구일 수 있어요.</div>
 </body></html>`;
 
+const VIEWER_AI_BRIDGE = `
+if(!window.__malloAiBridgeInstalled){
+  window.__malloAiBridgeInstalled=true;
+  var ko=window["\\uB9D0\\uB85C"]=window["\\uB9D0\\uB85C"]||{};
+  var en=window.mallo=window.mallo||ko;
+  var seq=0;
+  var HELP="AI 기능은 말로 온라인에서 로그인 후 크레딧으로 사용할 수 있어요.";
+  ko.ai=en.ai=function(prompt){return new Promise(function(resolve,reject){var id="ai_"+Date.now()+"_"+(++seq);listeners[id]={resolve:resolve,reject:reject};try{parent.postMessage({__mallo:"ai",id:id,prompt:String(prompt||"")},"*");}catch(e){delete listeners[id];reject(new Error(HELP));return;}setTimeout(function(){if(!listeners[id])return;delete listeners[id];reject(new Error("AI 응답이 지연되고 있어요. 잠시 후 다시 시도해 주세요."));},90000);});};
+  ko.aiSetup=en.aiSetup=function(){throw new Error(HELP);};
+}`;
+
 const page = (tool) => {
   const toolId = JSON.stringify(tool.id || '').replace(/</g, '\\u003c');
   const title = JSON.stringify(tool.title || '내 도구').replace(/</g, '\\u003c');
@@ -85,8 +96,7 @@ function withShim(html, seed){
     + 'function patch(){var rs=localStorage.setItem.bind(localStorage),rg=localStorage.getItem.bind(localStorage),rr=localStorage.removeItem.bind(localStorage);localStorage.setItem=function(k,v){memory[String(k)]=String(v);post();try{return rs(k,v)}catch(e){}};localStorage.getItem=function(k){k=String(k);if(Object.prototype.hasOwnProperty.call(memory,k))return memory[k];try{return rg(k)}catch(e){return null}};localStorage.removeItem=function(k){delete memory[String(k)];post();try{return rr(k)}catch(e){}};}'
     + 'try{Object.assign(memory,SEED||{});}catch(e){}'
     + 'try{patch();}catch(e){}'
-    + 'window["\uB9D0\uB85C"]=window["\uB9D0\uB85C"]||{};window.mallo=window.mallo||window["\uB9D0\uB85C"];'
-    + 'window["\uB9D0\uB85C"].ai=window.mallo.ai=function(p){return new Promise(function(resolve,reject){var id=Math.random().toString(36).slice(2);listeners[id]={resolve:resolve,reject:reject};try{parent.postMessage({__mallo:"ai",id:id,prompt:String(p==null?"":p)},"*");}catch(e){reject(e);}setTimeout(function(){if(listeners[id]){delete listeners[id];reject(new Error("AI \uC751\uB2F5 \uC2DC\uAC04 \uCD08\uACFC"));}},60000);});};'
+    + VIEWER_AI_BRIDGE
     + 'window.addEventListener("message",function(e){var d=e.data;if(!d)return;if((d.__mallo==="ai_result"||d.__mallo==="ai-result")&&listeners[d.id]){var l=listeners[d.id];delete listeners[d.id];d.error?l.reject(new Error(d.error)):l.resolve(d.text||"");}});'
     + '})();</scr'+'ipt>';
   if(/<head[^>]*>/i.test(html)) return html.replace(/<head[^>]*>/i, m => m + shim);
@@ -111,18 +121,19 @@ async function initSession(){
 
 async function handleAiRequest(id, prompt){
   const reply = (payload)=>{ try{ frame.contentWindow && frame.contentWindow.postMessage(Object.assign({ __mallo:'ai-result', id }, payload), '*'); }catch(e){} };
-  if(!prompt || !String(prompt).trim()){ reply({ error:'내용을 입력해 주세요' }); return; }
-  if(!session){ reply({ error:'AI 기능은 로그인 후 사용할 수 있어요' }); return; }
   try{
+    if(!session) throw new Error('AI 기능은 말로에 로그인한 뒤 크레딧으로 사용할 수 있어요.');
     const res = await fetch('/api/ai', {
-      method:'POST',
-      headers:{ 'content-type':'application/json', authorization:'Bearer ' + session.access_token },
-      body: JSON.stringify({ prompt: String(prompt).slice(0, 12000) }),
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer ' + session.access_token },
+      body: JSON.stringify({ prompt }),
     });
-    const j = await res.json().catch(()=>({}));
-    if(!res.ok){ reply({ error: j.error || 'AI 처리에 실패했어요' }); return; }
-    reply({ text: j.text || '' });
-  }catch(e){ reply({ error:'AI 연결에 실패했어요' }); }
+    const data = await res.json().catch(() => ({}));
+    if(!res.ok || data.error) throw new Error(data.error || 'AI 처리 중 문제가 생겼어요.');
+    reply({ text: data.text || '' });
+  }catch(e){
+    reply({ error: e.message || 'AI 호출 실패' });
+  }
 }
 
 window.addEventListener('message', (e)=>{
