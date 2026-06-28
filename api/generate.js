@@ -429,14 +429,14 @@ export default async function handler(req) {
   const key = env('LLM_API_KEY');
   const primaryModel = provider === 'claude'
     ? pickClaudeModel(userPrompt, !!code)
-    : env('LLM_MODEL', provider === 'openai' ? 'gpt-4o' : 'gemini-2.0-flash');
+    : env('LLM_MODEL', provider === 'openai' ? 'gpt-4o' : 'gemini-2.5-flash');
 
   let call = buildCall(provider, key, primaryModel);
   let extract = call.extract;
   let upstream = await fetch(call.url, call.options);
 
   // 잔액 부족·인증·쿼터 오류(400/401/402/403/429)면 무료 모델로 자동 폴백 → 서비스가 끊기지 않음
-  // 활성화 조건: LLM_FALLBACK_API_KEY 환경변수 설정(기본 공급자 gemini, 모델 gemini-2.0-flash)
+  // 활성화 조건: LLM_FALLBACK_API_KEY 환경변수 설정(기본 공급자 gemini, 모델 gemini-2.5-flash)
   const FALLBACK_STATUSES = [400, 401, 402, 403];
   const fbKey = env('LLM_FALLBACK_API_KEY', '');
   if (!upstream.ok && fbKey && FALLBACK_STATUSES.includes(upstream.status)) {
