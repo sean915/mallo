@@ -54,12 +54,17 @@
   .welcome{padding:28px 20px 6px}
   .welcome h2{font-size:21px;font-weight:800;letter-spacing:-0.4px;line-height:1.4}
   .welcome p{font-size:14px;color:var(--sub);margin-top:8px;line-height:1.6}
+  .template-tabs{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:12px 20px 0}
+  .template-tab{height:36px;border:1px solid var(--line);border-radius:9px;background:#fff;color:var(--sub);font-size:13px;font-weight:800}
+  .template-tab.active{border-color:var(--blue);background:var(--blue-bg);color:var(--blue-dark)}
   .chips{display:flex;flex-wrap:wrap;gap:8px;padding:14px 20px}
   .chip{font-size:13.5px;font-weight:600;color:var(--blue-dark);background:var(--blue-bg);padding:9px 14px;border-radius:99px;transition:.15s}
   .chip:hover{background:#d6e9ff;transform:translateY(-1px)}
 
-  /* 직무 도구 그리드 (시작 화면) */
-  .tools-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:14px 20px;min-height:0;overflow-y:auto}
+  /* 도구 템플릿 그리드 (시작 화면) */
+  .tools-grid{display:flex;flex-direction:column;gap:12px;padding:14px 20px;min-height:0;overflow-y:auto}
+  .template-panel{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .template-panel.hidden{display:none !important}
   .tcard{display:flex;flex-direction:column;align-items:flex-start;gap:5px;background:var(--card);border:1.5px solid var(--line);border-radius:14px;padding:13px 14px;text-align:left;transition:.15s}
   .tcard:hover{border-color:var(--blue);background:var(--blue-bg);transform:translateY(-1px)}
   .tcard .ic{font-size:23px}
@@ -178,6 +183,9 @@
   .welcome{padding:26px 20px 4px}
   .welcome h2{font-size:20px;letter-spacing:0;color:#101828}
   .welcome p{max-width:350px;color:#586571}
+  .template-tabs{padding-top:14px}
+  .template-tab{border-color:#d8e5e3;background:#fff;color:#667085}
+  .template-tab.active{border-color:#0f9f73;background:#e9fbf4;color:#0b7b59}
   .tools-grid{gap:10px;padding-top:12px}
   .tcard{border-color:#dde7e5;border-radius:10px;background:#fff;box-shadow:0 8px 20px rgba(15,23,42,.035);gap:8px;min-height:92px}
   .tcard:hover{border-color:#0f9f73;background:#f4fffa;transform:translateY(-1px)}
@@ -305,6 +313,8 @@
     .mtab.active{color:#0f9f73;border-bottom-color:#0f9f73}
     body.app-mode #__mlt{display:none}
     .welcome{padding:20px 16px 4px}
+    .template-tabs{padding:10px 14px 0}
+    .template-tab{height:34px;font-size:12.5px}
     .tools-grid{padding:12px 14px}
     .tcard{min-height:86px;padding:12px}
     .empty{padding:24px 18px}
@@ -537,19 +547,38 @@
 <div class="main" id="mainEl">
   <div class="left">
     <div class="welcome" id="welcome">
-      <h2>필요한 업무를 말하면 도구가 됩니다</h2>
-      <p>원하는 일을 고르거나 아래 입력창에 설명해 주세요. 말로가 바로 실행 가능한 웹 도구로 만들고, 만든 뒤에도 말로 수정할 수 있어요.</p>
+      <h2>산업이나 직무를 고르면 도구가 됩니다</h2>
+      <p>내 상황에 가까운 버튼을 누르면 바로 실행 가능한 웹 도구를 만들어요. 만든 뒤에는 말로 계속 수정할 수 있습니다.</p>
+    </div>
+    <div class="template-tabs" role="tablist" aria-label="도구 템플릿 분류">
+      <button class="template-tab active" type="button" data-template-tab="industry" aria-selected="true">산업별</button>
+      <button class="template-tab" type="button" data-template-tab="job" aria-selected="false">직무별</button>
     </div>
     <div class="tools-grid" id="chips">
-      <button class="tcard" data-prompt="거래처·고객 연락처를 관리하는 프로그램 만들어줘. 이름·회사·연락처·이메일·메모를 등록하고, 표로 목록 보기, 이름/회사 검색, 추가·수정·삭제, 엑셀(CSV) 내보내기. 한국어 샘플 6개 채워줘. 입력한 내용은 저장돼서 다시 열어도 남아 있게."><span class="ic">👥</span><span class="nm">거래처·고객 관리</span><span class="ds">연락처·메모·검색</span></button>
-      <button class="tcard" data-prompt="가게 일일 매출·지출 장부 프로그램 만들어줘. 날짜·구분(매출/지출)·내용·금액 입력, 목록 표, 날짜별/이번 달 합계와 순이익 요약, 검색, 추가·수정·삭제, 엑셀(CSV) 내보내기. 한국어 샘플 데이터 채워줘. 입력 내용은 저장되게."><span class="ic">💰</span><span class="nm">매출·지출 장부</span><span class="ds">일별 합계·순이익</span></button>
-      <button class="tcard" data-prompt="재고 관리 프로그램 만들어줘. 상품명·분류·수량·단가 등록, 목록 표와 검색, 수량 +/- 버튼, 재고 5개 이하 빨간 표시, 총 재고 수량·금액 요약, 추가·수정·삭제, CSV 내보내기. 한국어 샘플 채워줘. 저장되게."><span class="ic">📦</span><span class="nm">재고 관리</span><span class="ds">수량·부족 알림</span></button>
-      <button class="tcard" data-prompt="직원 출퇴근(근태) 기록 프로그램 만들어줘. 직원 이름 선택, 출근/퇴근 버튼으로 시간 자동 기록, 날짜별 목록, 근무시간 자동 계산, 이번 달 직원별 합계, 검색, 수정·삭제, CSV 내보내기. 한국어 샘플 채워줘. 저장되게."><span class="ic">🕘</span><span class="nm">출퇴근 기록</span><span class="ds">근무시간 자동계산</span></button>
-      <button class="tcard" data-prompt="견적서·거래명세서를 만드는 프로그램 만들어줘. 상호·연락처 등 우리 정보와 받는 곳 정보 입력, 품목(이름·수량·단가) 여러 줄 추가, 공급가·부가세(10%)·합계 자동 계산, 깔끔한 견적서 형태로 보기, 인쇄 버튼. 한국어 샘플 채워줘. 입력 내용 저장되게."><span class="ic">🧾</span><span class="nm">견적서·명세서</span><span class="ds">금액·부가세 자동</span></button>
-      <button class="tcard" data-prompt="업무 할 일·진행 상황 보드 만들어줘. 할 일/진행 중/완료 3개 칸, 카드 추가, 칸 사이 이동 버튼(또는 드래그), 마감일·담당자 표시, 완료 개수 요약, 추가·수정·삭제. 한국어 샘플 카드 채워줘. 저장되게."><span class="ic">✅</span><span class="nm">할 일·진행 보드</span><span class="ds">칸반·마감일</span></button>
-      <button class="tcard" data-prompt="회의록·업무 메모 정리 프로그램 만들어줘. 제목·날짜·참석자·내용·결정사항/할일을 기록, 목록과 검색, 클릭하면 상세 보기, 추가·수정·삭제, 텍스트로 복사 버튼. 한국어 샘플 채워줘. 저장되게."><span class="ic">📝</span><span class="nm">회의록·메모</span><span class="ds">결정사항·검색</span></button>
-      <button class="tcard" data-prompt="예약·일정 관리 프로그램 만들어줘. 날짜·시간·고객명·연락처·메모로 예약 등록, 날짜별 목록과 달력 보기, 오늘 예약 강조, 검색, 추가·수정·삭제, CSV 내보내기. 한국어 샘플 채워줘. 저장되게."><span class="ic">📅</span><span class="nm">예약·일정</span><span class="ds">달력·오늘 예약</span></button>
-      <button class="tcard" data-prompt="실무용 계산기 프로그램 만들어줘. 부가세(공급가↔합계), 마진율·판매가, 할인가 계산을 탭으로 전환해서 쓸 수 있게. 입력하면 즉시 계산 결과 표시, 큰 글씨로 보기 쉽게. 한국어로."><span class="ic">🧮</span><span class="nm">실무 계산기</span><span class="ds">부가세·마진·할인</span></button>
+      <div class="template-panel" data-template-panel="industry">
+        <button class="tcard" data-prompt="음식점·카페 운영 관리 도구 만들어줘. 메뉴별 판매 기록, 일 매출·지출 입력, 재료 재고와 부족 알림, 예약/단체 주문 메모, 오늘 할 일, 월간 순이익 요약, 검색, 추가·수정·삭제, CSV 내보내기. 한국어 샘플 데이터 채워주고 저장되게."><span class="ic">🍽️</span><span class="nm">음식점·카페</span><span class="ds">매출·재료·예약</span></button>
+        <button class="tcard" data-prompt="미용실·네일·뷰티샵 고객 관리 도구 만들어줘. 고객명·연락처·방문일·시술 내용·금액·다음 예약·주의사항을 기록하고, 재방문 예정 고객 알림, 오늘 예약 목록, 고객 검색, 매출 요약, 추가·수정·삭제, CSV 내보내기. 한국어 샘플 채워주고 저장되게."><span class="ic">💇</span><span class="nm">미용·뷰티샵</span><span class="ds">예약·시술 기록</span></button>
+        <button class="tcard" data-prompt="학원·교습소 운영 도구 만들어줘. 학생 정보, 반/과목, 출결, 수강료 납부 여부, 상담 메모, 과제 체크, 이번 달 미납자 목록, 반별 학생 현황, 검색, 추가·수정·삭제, CSV 내보내기. 한국어 샘플 채워주고 저장되게."><span class="ic">🎓</span><span class="nm">학원·교습소</span><span class="ds">학생·출결·수납</span></button>
+        <button class="tcard" data-prompt="병원·클리닉 접수/예약 관리 도구 만들어줘. 환자명·연락처·예약일시·방문 목적·담당자·결제 상태·후속 방문 메모를 관리하고, 오늘 예약과 미확인 예약 강조, 검색, 추가·수정·삭제, CSV 내보내기. 의료 판단 기능은 넣지 말고 행정 관리 중심으로 만들어줘."><span class="ic">🏥</span><span class="nm">병원·클리닉</span><span class="ds">접수·예약·메모</span></button>
+        <button class="tcard" data-prompt="부동산 중개 매물·고객 관리 도구 만들어줘. 매물 주소·유형·보증금/월세/매매가·상태·사진 메모, 고객 희망 조건, 방문 일정, 매물-고객 매칭 메모, 검색 필터, 추가·수정·삭제, CSV 내보내기. 한국어 샘플 채워주고 저장되게."><span class="ic">🏠</span><span class="nm">부동산 중개</span><span class="ds">매물·고객 매칭</span></button>
+        <button class="tcard" data-prompt="쇼핑몰·스마트스토어 주문/CS 관리 도구 만들어줘. 주문번호·고객명·상품·수량·배송상태·문의 유형·처리상태를 기록하고, 오늘 발송 목록, 미처리 문의, 재고 부족 알림, 검색, 추가·수정·삭제, CSV 내보내기. 한국어 샘플 채워주고 저장되게."><span class="ic">🛒</span><span class="nm">쇼핑몰</span><span class="ds">주문·배송·CS</span></button>
+        <button class="tcard" data-prompt="제조업·공방 작업 관리 도구 만들어줘. 주문/작업명·고객·납기·공정 상태·원자재 사용량·담당자·메모를 관리하고, 납기 임박 강조, 공정별 현황, 재료 부족 체크, 검색, 추가·수정·삭제, CSV 내보내기. 한국어 샘플 채워주고 저장되게."><span class="ic">🛠️</span><span class="nm">제조·공방</span><span class="ds">작업·납기·재료</span></button>
+        <button class="tcard" data-prompt="숙박·공간대여 예약 관리 도구 만들어줘. 객실/공간명·예약자·날짜·시간·결제 상태·청소 상태·요청사항을 관리하고, 오늘 체크인/이용 일정, 미정산 목록, 달력 보기, 검색, 추가·수정·삭제, CSV 내보내기. 한국어 샘플 채워주고 저장되게."><span class="ic">🏨</span><span class="nm">숙박·공간대여</span><span class="ds">예약·청소·정산</span></button>
+        <button class="tcard" data-prompt="행사·강의 운영 관리 도구 만들어줘. 행사명·일정·참가자·연락처·입금 여부·출석 여부·준비물 체크·문의 메모를 관리하고, 참가자 명단, 미입금/미출석 현황, 검색, 추가·수정·삭제, CSV 내보내기. 한국어 샘플 채워주고 저장되게."><span class="ic">🎤</span><span class="nm">행사·강의</span><span class="ds">참가자·입금·출석</span></button>
+        <button class="tcard" data-prompt="프리랜서·1인 사업자 업무 관리 도구 만들어줘. 고객·프로젝트·견적 금액·계약 상태·마감일·청구/입금 여부·작업 메모를 관리하고, 이번 달 매출 예상, 마감 임박 작업, 미수금 목록, 검색, 추가·수정·삭제, CSV 내보내기. 한국어 샘플 채워주고 저장되게."><span class="ic">💼</span><span class="nm">프리랜서</span><span class="ds">견적·마감·정산</span></button>
+      </div>
+      <div class="template-panel hidden" data-template-panel="job">
+        <button class="tcard" data-prompt="거래처·고객 CRM 도구 만들어줘. 이름·회사·연락처·이메일·관심사·상담 메모·다음 연락일을 관리하고, 연락 예정 고객 알림, 고객 등급 필터, 검색, 추가·수정·삭제, CSV 내보내기. 한국어 샘플 8개 채워주고 저장되게."><span class="ic">👥</span><span class="nm">고객·거래처</span><span class="ds">CRM·상담 메모</span></button>
+        <button class="tcard" data-prompt="매출·비용 장부 도구 만들어줘. 날짜·구분(매출/비용)·거래처·항목·금액·결제수단을 입력하고, 일별/월별 합계, 순이익, 카테고리별 비중, 검색, 추가·수정·삭제, CSV 내보내기. 한국어 샘플 채워주고 저장되게."><span class="ic">💰</span><span class="nm">매출·비용</span><span class="ds">장부·순이익</span></button>
+        <button class="tcard" data-prompt="재고·발주 관리 도구 만들어줘. 품목·분류·현재 수량·안전재고·단가·거래처를 관리하고, 입고/출고 버튼, 부족 품목 자동 강조, 발주 필요 목록, 총 재고 금액, 검색, 추가·수정·삭제, CSV 내보내기. 한국어 샘플 채워주고 저장되게."><span class="ic">📦</span><span class="nm">재고·발주</span><span class="ds">부족 알림·입출고</span></button>
+        <button class="tcard" data-prompt="예약·일정 관리 도구 만들어줘. 날짜·시간·고객/업무명·담당자·상태·메모를 등록하고, 오늘 일정, 달력형 보기, 상태별 필터, 예약 변경 기록, 검색, 추가·수정·삭제, CSV 내보내기. 한국어 샘플 채워주고 저장되게."><span class="ic">📅</span><span class="nm">예약·일정</span><span class="ds">달력·오늘 일정</span></button>
+        <button class="tcard" data-prompt="견적·계약·청구 관리 도구 만들어줘. 고객 정보, 품목·수량·단가, 공급가·부가세·합계 자동 계산, 견적/계약/청구 상태, 입금 여부, 인쇄용 보기, 검색, 추가·수정·삭제, CSV 내보내기. 한국어 샘플 채워주고 저장되게."><span class="ic">🧾</span><span class="nm">견적·청구</span><span class="ds">금액·상태 관리</span></button>
+        <button class="tcard" data-prompt="직원 근태·급여 기초 관리 도구 만들어줘. 직원별 출근/퇴근 시간, 휴게시간, 근무시간 자동 계산, 시급/일급 입력, 이번 달 예상 지급액, 지각/결근 메모, 검색, 수정·삭제, CSV 내보내기. 한국어 샘플 채워주고 저장되게."><span class="ic">🕘</span><span class="nm">근태·급여</span><span class="ds">시간·지급액 계산</span></button>
+        <button class="tcard" data-prompt="프로젝트·할 일 관리 보드 만들어줘. 할 일/진행 중/검토/완료 칸, 카드 제목·담당자·마감일·우선순위·메모, 칸 이동 버튼, 마감 임박 강조, 담당자별 필터, 추가·수정·삭제. 한국어 샘플 카드 채워주고 저장되게."><span class="ic">✅</span><span class="nm">프로젝트·할 일</span><span class="ds">칸반·마감일</span></button>
+        <button class="tcard" data-prompt="문의·AS·CS 처리 관리 도구 만들어줘. 접수일·고객명·연락처·문의 유형·내용·담당자·처리 상태·답변 메모를 관리하고, 미처리/긴급 문의 강조, 상태별 필터, 검색, 추가·수정·삭제, CSV 내보내기. 한국어 샘플 채워주고 저장되게."><span class="ic">🎧</span><span class="nm">문의·CS</span><span class="ds">접수·처리 상태</span></button>
+        <button class="tcard" data-prompt="회의록·업무 문서함 도구 만들어줘. 제목·날짜·참석자·안건·결정사항·할 일·담당자·마감일을 기록하고, 목록/상세 보기, 결정사항 검색, 할 일만 보기, 텍스트 복사, 추가·수정·삭제. 한국어 샘플 채워주고 저장되게."><span class="ic">📝</span><span class="nm">회의록·문서</span><span class="ds">결정사항·할 일</span></button>
+        <button class="tcard" data-prompt="실무 계산·리포트 대시보드 만들어줘. 부가세, 마진율, 할인율, 손익분기점 계산 탭을 만들고, 입력 즉시 결과 표시, 계산 이력 저장, 월별 요약 카드, CSV 내보내기, 보기 쉬운 숫자 포맷을 적용해줘. 한국어 샘플 채워줘."><span class="ic">🧮</span><span class="nm">계산·리포트</span><span class="ds">부가세·마진·요약</span></button>
+      </div>
       <button class="tcard more" id="tcMore">직접 말로 만들기</button>
     </div>
     <div class="chips hidden" id="editChips">
@@ -1566,7 +1595,20 @@ input.addEventListener('keydown', e=>{
 });
 input.addEventListener('input', ()=>{ input.style.height='auto'; input.style.height = Math.min(input.scrollHeight,120)+'px'; });
 
-// 직무 도구 카드: 누르면 바로 새 도구 생성 (입력·전송 단계 없음)
+// 템플릿 분류 탭
+document.querySelectorAll('[data-template-tab]').forEach(btn => btn.onclick = ()=>{
+  const key = btn.dataset.templateTab;
+  document.querySelectorAll('[data-template-tab]').forEach(tab => {
+    const active = tab.dataset.templateTab === key;
+    tab.classList.toggle('active', active);
+    tab.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+  document.querySelectorAll('[data-template-panel]').forEach(panel => {
+    panel.classList.toggle('hidden', panel.dataset.templatePanel !== key);
+  });
+});
+
+// 도구 템플릿 카드: 누르면 바로 새 도구 생성 (입력·전송 단계 없음)
 document.querySelectorAll('#chips .tcard[data-prompt]').forEach(c => c.onclick = ()=>{
   if(S.busy) return;
   resetWorkspace();

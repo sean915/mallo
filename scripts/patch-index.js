@@ -406,7 +406,7 @@ replaceOnce(
 
 replaceOnce(
 `  .tools-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:14px 20px}`,
-`  .tools-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:14px 20px;min-height:0;overflow-y:auto}`,
+`  .tools-grid{display:flex;flex-direction:column;gap:12px;padding:14px 20px;min-height:0;overflow-y:auto}`,
   'prompt tools grid scroll'
 );
 
@@ -505,8 +505,8 @@ replaceOnce(
 replaceOnce(
 `      <h2>어떤 도구가 필요하세요? 🛠️</h2>
       <p>아래에서 고르면 <b>바로 만들어 드려요.</b> 누르기만 하면 끝 — 만든 뒤엔 말로 고치고, 입력한 내용은 자동으로 저장돼요.</p>`,
-`      <h2>필요한 업무를 말하면 도구가 됩니다</h2>
-      <p>원하는 일을 고르거나 아래 입력창에 설명해 주세요. 말로가 바로 실행 가능한 웹 도구로 만들고, 만든 뒤에도 말로 수정할 수 있어요.</p>`,
+`      <h2>산업이나 직무를 고르면 도구가 됩니다</h2>
+      <p>내 상황에 가까운 버튼을 누르면 바로 실행 가능한 웹 도구를 만들어요. 만든 뒤에는 말로 계속 수정할 수 있습니다.</p>`,
   'professional app welcome copy'
 );
 
